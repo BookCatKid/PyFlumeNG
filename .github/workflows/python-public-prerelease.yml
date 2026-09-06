@@ -5,10 +5,12 @@ name: Upload Python Package Prerelease
 
 on:
   release:
-    types: [prereleased]
+    types: [published]
+  workflow_dispatch:
 
 jobs:
   deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == true
 
     runs-on: ubuntu-latest
     permissions:
