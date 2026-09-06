@@ -1,8 +1,11 @@
 """PyFlumeNG: a complete Flume API client with portal capabilities."""
 
-from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300, F401
-from .auth import FlumeAuth as PersonalAuth  # noqa: WPS300, F401
-from .auth import FlumePortalAuth as PortalAuth  # noqa: WPS300, F401
+from .auth import (  # noqa: WPS300, F401
+    FlumeAuth,
+    FlumeAuth as PersonalAuth,
+    FlumePortalAuth,
+    FlumePortalAuth as PortalAuth,
+)
 from .client import FlumeClient  # noqa: WPS300, F401
 from .data import FlumeData  # noqa: WPS300, F401
 from .devices import FlumeDeviceList  # noqa: WPS300, F401
@@ -22,8 +25,8 @@ from .models import (  # noqa: WPS300, F401
     DoNotAlertSchedule,
     FlumeModel,
     FlumeResponse,
-    Integration,
     Insurer,
+    Integration,
     Leak,
     Location,
     LocationAccess,

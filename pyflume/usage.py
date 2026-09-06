@@ -9,8 +9,8 @@ from .constants import (  # noqa: WPS300
     API_USAGE_URL,
     DEFAULT_TIMEOUT,
 )
-from .utils import configure_logger, flume_response_error  # noqa: WPS300
 from .models import UsageAlert, UsageAlertRule, modelize  # noqa: WPS300
+from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
 LOGGER = configure_logger(__name__)

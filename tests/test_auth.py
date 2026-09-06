@@ -64,11 +64,9 @@ class TestFlumeAuth(unittest.TestCase):
         def authorize(request, context):
             state = parse_qs(request.text)["state"][0]
             context.status_code = 302
-            context.headers["Location"] = (
-                "{0}?code=test-code&state={1}".format(
-                    pyflume.constants.PORTAL_REDIRECT_URI,
-                    state,
-                )
+            context.headers["Location"] = "{0}?code=test-code&state={1}".format(
+                pyflume.constants.PORTAL_REDIRECT_URI,
+                state,
             )
             return ""
 

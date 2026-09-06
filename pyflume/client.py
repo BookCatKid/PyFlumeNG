@@ -13,9 +13,9 @@ from .models import (
     CurrentFlow,
     Device,
     DoNotAlertSchedule,
-    FlumeModel,
-    Integration,
+    FlumeResponse,
     Insurer,
+    Integration,
     Leak,
     Location,
     LocationAccess,
@@ -29,8 +29,6 @@ from .models import (
     UsageAlert,
     UsageAlertRule,
     User,
-    FlumeResponse,
-    modelize,
 )
 
 
@@ -50,7 +48,11 @@ class FlumeClient:
         A 401 is retried once after refreshing the auth object. All other
         errors retain the response envelope and are raised as typed errors.
         """
-        url = path if path.startswith("http") else urljoin(self.base_url + "/", path.lstrip("/"))
+        url = (
+            path
+            if path.startswith("http")
+            else urljoin(self.base_url + "/", path.lstrip("/"))
+        )
         retried = False
         request_timeout = kwargs.pop("timeout", self.timeout)
         while True:
@@ -71,13 +73,17 @@ class FlumeClient:
             except ValueError as exc:
                 envelope = {}
                 if response.status_code < 200 or response.status_code >= 300:
-                    raise FlumeHTTPError("Flume returned a non-JSON error", response) from exc
+                    raise FlumeHTTPError(
+                        "Flume returned a non-JSON error", response
+                    ) from exc
             if response.status_code == 401 and not retried:
                 self.auth.refresh()
                 retried = True
                 continue
             if response.status_code == 429:
-                raise FlumeRateLimitError("Flume API rate limit exceeded", response, envelope)
+                raise FlumeRateLimitError(
+                    "Flume API rate limit exceeded", response, envelope
+                )
             if response.status_code < 200 or response.status_code >= 300:
                 raise FlumeHTTPError("Flume API request failed", response, envelope)
             return envelope
@@ -99,18 +105,32 @@ class FlumeClient:
 
     def list_all(self, path, params=None, model=None):
         """Fetch every page from a paginated Flume list endpoint."""
-        params = dict(params or {})
-        params.setdefault("limit", 2000)
-        params.setdefault("offset", 0)
         results = []
-        next_path = path
-        while next_path:
-            envelope = self.request("GET", next_path, params=params)
-            page = modelize(envelope.get("data") or [], model)
+        for page in self.iter_pages(path, params=params, model=model):
+            page = page.data or []
             results.extend(page if isinstance(page, list) else [page])
-            next_path = (envelope.get("pagination") or {}).get("next")
-            params = {}
         return results
+
+    def iter_pages(self, path, params=None, model=None):
+        """Yield typed response envelopes for each page of a list endpoint.
+
+        A repeated pagination link is treated as a server-side pagination
+        failure and stops traversal instead of causing an infinite loop.
+        """
+        request_params = dict(params or {})
+        request_params.setdefault("limit", 2000)
+        request_params.setdefault("offset", 0)
+        next_path = path
+        seen = set()
+        while next_path:
+            marker = (next_path, tuple(sorted(request_params.items())))
+            if marker in seen:
+                raise RuntimeError("Flume pagination returned a repeated next link")
+            seen.add(marker)
+            page = self.response("GET", next_path, model=model, params=request_params)
+            yield page
+            next_path = page.next_url
+            request_params = {}
 
     def _user_path(self, suffix=""):
         return "/users/{0}{1}".format(self.auth.user_id, suffix)
@@ -127,25 +147,45 @@ class FlumeClient:
         return self.list_all("/devices", params, Device)
 
     def get_device(self, device_id, **params):
-        return self.data_one("GET", self._user_path("/devices/{0}".format(device_id)), Device, params=params)
+        return self.data_one(
+            "GET",
+            self._user_path("/devices/{0}".format(device_id)),
+            Device,
+            params=params,
+        )
 
     def get_portal_device(self, device_id, **params):
         """Fetch one device through the portal's root device route."""
-        return self.data_one("GET", "/devices/{0}".format(device_id), Device, params=params)
+        return self.data_one(
+            "GET", "/devices/{0}".format(device_id), Device, params=params
+        )
 
     def query(self, device_id, payload):
-        return self.data("POST", self._user_path("/devices/{0}/query".format(device_id)), QueryResult, json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/query".format(device_id)),
+            QueryResult,
+            json=payload,
+        )
 
     def portal_query(self, device_id, payload):
         """Submit a query through the portal's root device route."""
-        return self.data("POST", "/devices/{0}/query".format(device_id), QueryResult, json=payload)
+        return self.data(
+            "POST", "/devices/{0}/query".format(device_id), QueryResult, json=payload
+        )
 
     def get_current_flow(self, device_id):
-        return self.data_one("GET", self._user_path("/devices/{0}/query/active".format(device_id)), CurrentFlow)
+        return self.data_one(
+            "GET",
+            self._user_path("/devices/{0}/query/active".format(device_id)),
+            CurrentFlow,
+        )
 
     def get_portal_current_flow(self, device_id):
         """Read current flow through the portal's root device route."""
-        return self.data_one("GET", "/devices/{0}/query/active".format(device_id), CurrentFlow)
+        return self.data_one(
+            "GET", "/devices/{0}/query/active".format(device_id), CurrentFlow
+        )
 
     # Locations and account mutations.
     def list_locations(self, **params):
@@ -160,7 +200,9 @@ class FlumeClient:
         return self.data_one("GET", "/location-profiles", LocationProfiles)
 
     def get_location(self, location_id):
-        return self.data_one("GET", self._user_path("/locations/{0}".format(location_id)), Location)
+        return self.data_one(
+            "GET", self._user_path("/locations/{0}".format(location_id)), Location
+        )
 
     def get_portal_location(self, location_id):
         """Fetch one location through the portal's root location route."""
@@ -174,7 +216,9 @@ class FlumeClient:
         return self.data("POST", "/locations", json=payload)
 
     def update_location(self, location_id, payload):
-        return self.data("PATCH", self._user_path("/locations/{0}".format(location_id)), json=payload)
+        return self.data(
+            "PATCH", self._user_path("/locations/{0}".format(location_id)), json=payload
+        )
 
     def update_portal_location(self, location_id, payload):
         """Update a location through the portal's root location route."""
@@ -202,21 +246,35 @@ class FlumeClient:
         return self.list_all("/notifications", params, Notification)
 
     def get_notification(self, notification_id):
-        return self.data_one("GET", self._user_path("/notifications/{0}".format(notification_id)), Notification)
+        return self.data_one(
+            "GET",
+            self._user_path("/notifications/{0}".format(notification_id)),
+            Notification,
+        )
 
     def get_portal_notification(self, notification_id):
         """Fetch one notification through the portal's root route."""
-        return self.data_one("GET", "/notifications/{0}".format(notification_id), Notification)
+        return self.data_one(
+            "GET", "/notifications/{0}".format(notification_id), Notification
+        )
 
     def update_notification(self, notification_id, payload):
-        return self.data("PATCH", self._user_path("/notifications/{0}".format(notification_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path("/notifications/{0}".format(notification_id)),
+            json=payload,
+        )
 
     def update_portal_notification(self, notification_id, payload):
         """Update a notification through the portal's root route."""
-        return self.data("PATCH", "/notifications/{0}".format(notification_id), json=payload)
+        return self.data(
+            "PATCH", "/notifications/{0}".format(notification_id), json=payload
+        )
 
     def delete_notification(self, notification_id):
-        return self.data("DELETE", self._user_path("/notifications/{0}".format(notification_id)))
+        return self.data(
+            "DELETE", self._user_path("/notifications/{0}".format(notification_id))
+        )
 
     def delete_portal_notification(self, notification_id):
         """Delete a notification through the portal's root route."""
@@ -225,52 +283,99 @@ class FlumeClient:
     def set_notification_read(self, notification_id, read=True, portal=True):
         """Set notification read state using the portal's frontend payload."""
         if portal:
-            return self.update_portal_notification(notification_id, {"read": bool(read)})
+            return self.update_portal_notification(
+                notification_id, {"read": bool(read)}
+            )
         return self.update_notification(notification_id, {"read": bool(read)})
 
     def list_usage_alerts(self, **params):
         return self.list_all(self._user_path("/usage-alerts"), params, UsageAlert)
 
     def list_event_rules(self, device_id, **params):
-        return self.list_all(self._user_path("/devices/{0}/rules".format(device_id)), params, UsageAlertRule)
+        return self.list_all(
+            self._user_path("/devices/{0}/rules".format(device_id)),
+            params,
+            UsageAlertRule,
+        )
 
     def list_usage_alert_rules(self, device_id, **params):
-        return self.list_all(self._user_path("/devices/{0}/rules/usage-alerts".format(device_id)), params, UsageAlertRule)
+        return self.list_all(
+            self._user_path("/devices/{0}/rules/usage-alerts".format(device_id)),
+            params,
+            UsageAlertRule,
+        )
 
     def list_portal_usage_alert_rules(self, device_id, **params):
         """List rules through the portal's root device route."""
-        return self.list_all("/devices/{0}/rules/usage-alerts".format(device_id), params, UsageAlertRule)
+        return self.list_all(
+            "/devices/{0}/rules/usage-alerts".format(device_id), params, UsageAlertRule
+        )
 
     def get_usage_alert_rule(self, device_id, rule_id):
-        return self.data_one("GET", self._user_path("/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)), UsageAlertRule)
+        return self.data_one(
+            "GET",
+            self._user_path(
+                "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
+            ),
+            UsageAlertRule,
+        )
 
     def get_portal_usage_alert_rule(self, device_id, rule_id):
         """Fetch one rule through the portal's root device route."""
-        return self.data_one("GET", "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id), UsageAlertRule)
+        return self.data_one(
+            "GET",
+            "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id),
+            UsageAlertRule,
+        )
 
     def create_usage_alert_rule(self, device_id, payload):
-        return self.data("POST", self._user_path("/devices/{0}/rules/usage-alerts".format(device_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/rules/usage-alerts".format(device_id)),
+            json=payload,
+        )
 
     def create_portal_usage_alert_rule(self, device_id, payload):
         """Create a rule through the portal's root device route."""
-        return self.data("POST", "/devices/{0}/rules/usage-alerts".format(device_id), json=payload)
+        return self.data(
+            "POST", "/devices/{0}/rules/usage-alerts".format(device_id), json=payload
+        )
 
     def update_usage_alert_rule(self, device_id, rule_id, payload):
-        return self.data("PATCH", self._user_path("/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path(
+                "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
+            ),
+            json=payload,
+        )
 
     def update_portal_usage_alert_rule(self, device_id, rule_id, payload):
         """Update a rule using the portal service's collection PATCH form."""
-        return self.data("PATCH", "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id), json=payload)
+        return self.data(
+            "PATCH",
+            "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id),
+            json=payload,
+        )
 
     def delete_usage_alert_rule(self, device_id, rule_id):
-        return self.data("DELETE", self._user_path("/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)))
+        return self.data(
+            "DELETE",
+            self._user_path(
+                "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
+            ),
+        )
 
     def delete_portal_usage_alert_rule(self, device_id, rule_id):
         """Delete a rule through the portal service's collection route."""
-        return self.data("DELETE", "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id))
+        return self.data(
+            "DELETE", "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
+        )
 
     def set_usage_alert_rule_active(self, device_id, rule_id, active):
-        return self.update_usage_alert_rule(device_id, rule_id, {"active": bool(active)})
+        return self.update_usage_alert_rule(
+            device_id, rule_id, {"active": bool(active)}
+        )
 
     def set_portal_usage_alert_rule_active(self, device_id, rule_id, active):
         """Toggle a rule using the portal service's collection PATCH form."""
@@ -281,54 +386,89 @@ class FlumeClient:
         )
 
     def list_leaks(self, device_id):
-        return self.data_one("GET", self._user_path("/devices/{0}/leaks/active".format(device_id)), Leak)
+        return self.data_one(
+            "GET", self._user_path("/devices/{0}/leaks/active".format(device_id)), Leak
+        )
 
     def list_portal_leaks(self, device_id):
         """Read active leaks through the portal's user-scoped route."""
-        return self.data("GET", self._user_path("/devices/{0}/leaks/active".format(device_id)))
+        return self.data(
+            "GET", self._user_path("/devices/{0}/leaks/active".format(device_id))
+        )
 
     def get_leak(self, device_id, leak_id):
-        return self.data_one("GET", self._user_path("/devices/{0}/leaks/{1}".format(device_id, leak_id)), Leak)
+        return self.data_one(
+            "GET",
+            self._user_path("/devices/{0}/leaks/{1}".format(device_id, leak_id)),
+            Leak,
+        )
 
     def get_portal_leak(self, device_id, leak_id):
         """Read one active leak through the portal's user-scoped route."""
-        return self.data("GET", self._user_path("/devices/{0}/leaks/{1}".format(device_id, leak_id)))
+        return self.data(
+            "GET", self._user_path("/devices/{0}/leaks/{1}".format(device_id, leak_id))
+        )
 
     # Budgets and subscriptions.
     def list_budgets(self, device_id, **params):
-        return self.list_all(self._user_path("/devices/{0}/budgets".format(device_id)), params, Budget)
+        return self.list_all(
+            self._user_path("/devices/{0}/budgets".format(device_id)), params, Budget
+        )
 
     def list_portal_budgets(self, device_id, **params):
         """List budgets through the portal's root device route."""
         return self.list_all("/devices/{0}/budgets".format(device_id), params, Budget)
 
     def get_budget(self, device_id, budget_id):
-        return self.data_one("GET", self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)), Budget)
+        return self.data_one(
+            "GET",
+            self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
+            Budget,
+        )
 
     def get_portal_budget(self, device_id, budget_id):
         """Fetch one budget using the portal service's collection GET form."""
-        return self.data_one("GET", "/devices/{0}/budgets/{1}".format(device_id, budget_id), Budget)
+        return self.data_one(
+            "GET", "/devices/{0}/budgets/{1}".format(device_id, budget_id), Budget
+        )
 
     def create_budget(self, device_id, payload):
-        return self.data("POST", self._user_path("/devices/{0}/budgets".format(device_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/budgets".format(device_id)),
+            json=payload,
+        )
 
     def create_portal_budget(self, device_id, payload):
         """Create a budget through the portal's root device route."""
         return self.data("POST", "/devices/{0}/budgets".format(device_id), json=payload)
 
     def update_budget(self, device_id, budget_id, payload):
-        return self.data("PATCH", self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
+            json=payload,
+        )
 
     def update_portal_budget(self, device_id, budget_id, payload):
         """Update a budget using the portal service's collection PATCH form."""
-        return self.data("PATCH", "/devices/{0}/budgets/{1}".format(device_id, budget_id), json=payload)
+        return self.data(
+            "PATCH",
+            "/devices/{0}/budgets/{1}".format(device_id, budget_id),
+            json=payload,
+        )
 
     def delete_budget(self, device_id, budget_id):
-        return self.data("DELETE", self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)))
+        return self.data(
+            "DELETE",
+            self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
+        )
 
     def delete_portal_budget(self, device_id, budget_id):
         """Delete a budget using the portal service's collection route."""
-        return self.data("DELETE", "/devices/{0}/budgets/{1}".format(device_id, budget_id))
+        return self.data(
+            "DELETE", "/devices/{0}/budgets/{1}".format(device_id, budget_id)
+        )
 
     def list_subscriptions(self, **params):
         return self.list_all(self._user_path("/subscriptions"), params, Subscription)
@@ -338,70 +478,140 @@ class FlumeClient:
         return self.list_all("/subscriptions", params, Subscription)
 
     def get_subscription(self, subscription_id):
-        return self.data_one("GET", self._user_path("/subscriptions/{0}".format(subscription_id)), Subscription)
+        return self.data_one(
+            "GET",
+            self._user_path("/subscriptions/{0}".format(subscription_id)),
+            Subscription,
+        )
 
     def get_portal_subscription(self, subscription_id):
         """Fetch a subscription through the portal's collection GET form."""
-        return self.data_one("GET", "/subscriptions/{0}".format(subscription_id), Subscription)
+        return self.data_one(
+            "GET", "/subscriptions/{0}".format(subscription_id), Subscription
+        )
 
     def create_location_subscription(self, location_id, payload):
-        return self.data("POST", self._user_path("/locations/{0}/subscriptions".format(location_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/locations/{0}/subscriptions".format(location_id)),
+            json=payload,
+        )
 
     def create_portal_subscription(self, location_id, payload):
         """Create a subscription through the portal's root location route."""
-        return self.data("POST", "/locations/{0}/subscriptions".format(location_id), json=payload)
+        return self.data(
+            "POST", "/locations/{0}/subscriptions".format(location_id), json=payload
+        )
 
     def update_subscription(self, subscription_id, payload):
-        return self.data("PATCH", self._user_path("/subscriptions/{0}".format(subscription_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path("/subscriptions/{0}".format(subscription_id)),
+            json=payload,
+        )
 
     def update_portal_subscription(self, subscription_id, payload):
         """Update a subscription through the portal's collection PATCH form."""
-        return self.data("PATCH", "/subscriptions/{0}".format(subscription_id), json=payload)
+        return self.data(
+            "PATCH", "/subscriptions/{0}".format(subscription_id), json=payload
+        )
 
     def delete_subscription(self, subscription_id):
-        return self.data("DELETE", self._user_path("/subscriptions/{0}".format(subscription_id)))
+        return self.data(
+            "DELETE", self._user_path("/subscriptions/{0}".format(subscription_id))
+        )
 
     def delete_portal_subscription(self, subscription_id):
         """Delete a subscription through the portal's collection route."""
         return self.data("DELETE", "/subscriptions/{0}".format(subscription_id))
 
     def create_stripe_portal(self, return_url):
-        return self.data("POST", self._user_path("/stripe-portal"), json={"return_url": return_url})
+        return self.data(
+            "POST", self._user_path("/stripe-portal"), json={"return_url": return_url}
+        )
 
     def subscribe(self, return_url):
-        return self.data("POST", self._user_path("/subscribe"), json={"return_url": return_url})
+        return self.data(
+            "POST", self._user_path("/subscribe"), json={"return_url": return_url}
+        )
 
     # Portal-only usage schedules and shutoff configuration.
     def list_do_not_alert_schedules(self, device_id, **params):
-        return self.list_all(self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)), params, DoNotAlertSchedule)
+        return self.list_all(
+            self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)),
+            params,
+            DoNotAlertSchedule,
+        )
 
     def list_portal_do_not_alert_schedules(self, device_id, **params):
         """List DNA schedules through the portal's user-scoped route."""
-        return self.list_all(self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)), params, DoNotAlertSchedule)
+        return self.list_all(
+            self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)),
+            params,
+            DoNotAlertSchedule,
+        )
 
     def create_do_not_alert_schedule(self, device_id, payload):
-        return self.data("POST", self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)),
+            json=payload,
+        )
 
     def create_portal_do_not_alert_schedule(self, device_id, payload):
         """Create a DNA schedule using the portal payload."""
-        return self.data("POST", self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)),
+            json=payload,
+        )
 
     def update_do_not_alert_schedule(self, device_id, schedule_id, payload):
-        return self.data("PATCH", self._user_path("/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path(
+                "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
+            ),
+            json=payload,
+        )
 
     def update_portal_do_not_alert_schedule(self, device_id, schedule_id, payload):
         """Update a DNA schedule using the portal collection PATCH form."""
-        return self.data("PATCH", self._user_path("/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path(
+                "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
+            ),
+            json=payload,
+        )
 
     def delete_do_not_alert_schedule(self, device_id, schedule_id):
-        return self.data("DELETE", self._user_path("/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)))
+        return self.data(
+            "DELETE",
+            self._user_path(
+                "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
+            ),
+        )
 
     def delete_portal_do_not_alert_schedule(self, device_id, schedule_id):
         """Delete a DNA schedule using the portal collection route."""
-        return self.data("DELETE", self._user_path("/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)))
+        return self.data(
+            "DELETE",
+            self._user_path(
+                "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
+            ),
+        )
 
     def update_rule_schedules(self, device_id, rule_id, payload):
-        return self.data("PATCH", self._user_path("/devices/{0}/rules/usage-alerts/{1}/do-not-alert-schedules".format(device_id, rule_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path(
+                "/devices/{0}/rules/usage-alerts/{1}/do-not-alert-schedules".format(
+                    device_id, rule_id
+                )
+            ),
+            json=payload,
+        )
 
     def toggle_usage_alert_schedule(self, device_id, rule_id, schedule_id, active):
         """Associate a DNA schedule with a rule and set its active state."""
@@ -419,64 +629,154 @@ class FlumeClient:
         )
 
     def update_rule_shutoff_config(self, device_id, rule_id, payload):
-        return self.data("PATCH", self._user_path("/devices/{0}/rules/usage-alerts/{1}/shutoff-config".format(device_id, rule_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path(
+                "/devices/{0}/rules/usage-alerts/{1}/shutoff-config".format(
+                    device_id, rule_id
+                )
+            ),
+            json=payload,
+        )
 
     # Sharing, integrations, diagnostics, and support endpoints discovered in the portal.
     def list_location_access(self, location_id, **params):
-        return self.list_all(self._user_path("/locations/{0}/access".format(location_id)), params, LocationAccess)
+        return self.list_all(
+            self._user_path("/locations/{0}/access".format(location_id)),
+            params,
+            LocationAccess,
+        )
 
     def list_portal_location_access(self, location_id, **params):
         """List sharing records through the portal's root location route."""
-        return self.list_all("/locations/{0}/access".format(location_id), params, LocationAccess)
+        return self.list_all(
+            "/locations/{0}/access".format(location_id), params, LocationAccess
+        )
 
     def get_location_access(self, location_id, access_id):
-        return self.data_one("GET", self._user_path("/locations/{0}/access/{1}".format(location_id, access_id)), LocationAccess)
+        return self.data_one(
+            "GET",
+            self._user_path("/locations/{0}/access/{1}".format(location_id, access_id)),
+            LocationAccess,
+        )
 
     def get_portal_location_access(self, location_id, access_id):
         """Fetch sharing records through the portal collection GET form."""
-        return self.data_one("GET", "/locations/{0}/access/{1}".format(location_id, access_id), LocationAccess)
+        return self.data_one(
+            "GET",
+            "/locations/{0}/access/{1}".format(location_id, access_id),
+            LocationAccess,
+        )
 
     def grant_location_access(self, location_id, payload):
-        return self.data("POST", self._user_path("/locations/{0}/access".format(location_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/locations/{0}/access".format(location_id)),
+            json=payload,
+        )
 
     def grant_portal_location_access(self, location_id, payload):
         """Grant sharing access through the portal's root location route."""
-        return self.data("POST", "/locations/{0}/access".format(location_id), json=payload)
+        return self.data(
+            "POST", "/locations/{0}/access".format(location_id), json=payload
+        )
 
     def revoke_location_access(self, location_id, access_id):
-        return self.data("DELETE", self._user_path("/locations/{0}/access/{1}".format(location_id, access_id)))
+        return self.data(
+            "DELETE",
+            self._user_path("/locations/{0}/access/{1}".format(location_id, access_id)),
+        )
 
     def revoke_portal_location_access(self, location_id, access_id):
         """Revoke sharing access through the portal collection route."""
-        return self.data("DELETE", "/locations/{0}/access/{1}".format(location_id, access_id))
+        return self.data(
+            "DELETE", "/locations/{0}/access/{1}".format(location_id, access_id)
+        )
 
     def list_integrations(self, device_id, **params):
-        return self.list_all(self._user_path("/devices/{0}/integrations".format(device_id)), params, Integration)
+        return self.list_all(
+            self._user_path("/devices/{0}/integrations".format(device_id)),
+            params,
+            Integration,
+        )
 
     def list_portal_integrations(self, device_id, **params):
         """List integrations through the portal's user-scoped route."""
-        return self.list_all(self._user_path("/devices/{0}/integrations".format(device_id)), params, Integration)
+        return self.list_all(
+            self._user_path("/devices/{0}/integrations".format(device_id)),
+            params,
+            Integration,
+        )
 
     def get_integration(self, device_id, integration_id):
-        return self.data_one("GET", self._user_path("/devices/{0}/integrations/{1}".format(device_id, integration_id)), Integration)
+        return self.data_one(
+            "GET",
+            self._user_path(
+                "/devices/{0}/integrations/{1}".format(device_id, integration_id)
+            ),
+            Integration,
+        )
 
     def get_portal_integration(self, device_id, integration_id):
-        return self.data_one("GET", self._user_path("/devices/{0}/integrations/{1}".format(device_id, integration_id)), Integration)
+        return self.data_one(
+            "GET",
+            self._user_path(
+                "/devices/{0}/integrations/{1}".format(device_id, integration_id)
+            ),
+            Integration,
+        )
 
     def command_integration(self, device_id, integration_id, state):
-        return self.data("POST", self._user_path("/devices/{0}/integrations/{1}/command".format(device_id, integration_id)), json={"state": state})
+        return self.data(
+            "POST",
+            self._user_path(
+                "/devices/{0}/integrations/{1}/command".format(
+                    device_id, integration_id
+                )
+            ),
+            json={"state": state},
+        )
 
     def command_portal_integration(self, device_id, integration_id, state):
-        return self.data("POST", self._user_path("/devices/{0}/integrations/{1}/command".format(device_id, integration_id)), json={"state": state})
+        return self.data(
+            "POST",
+            self._user_path(
+                "/devices/{0}/integrations/{1}/command".format(
+                    device_id, integration_id
+                )
+            ),
+            json={"state": state},
+        )
 
     def refresh_integration(self, device_id, integration_id):
-        return self.data("POST", self._user_path("/devices/{0}/integrations/{1}/refresh".format(device_id, integration_id)), json={})
+        return self.data(
+            "POST",
+            self._user_path(
+                "/devices/{0}/integrations/{1}/refresh".format(
+                    device_id, integration_id
+                )
+            ),
+            json={},
+        )
 
     def refresh_portal_integration(self, device_id, integration_id):
-        return self.data("POST", self._user_path("/devices/{0}/integrations/{1}/refresh".format(device_id, integration_id)), json={})
+        return self.data(
+            "POST",
+            self._user_path(
+                "/devices/{0}/integrations/{1}/refresh".format(
+                    device_id, integration_id
+                )
+            ),
+            json={},
+        )
 
     def delete_integration(self, device_id, integration_id):
-        return self.data("DELETE", self._user_path("/devices/{0}/integrations/{1}".format(device_id, integration_id)))
+        return self.data(
+            "DELETE",
+            self._user_path(
+                "/devices/{0}/integrations/{1}".format(device_id, integration_id)
+            ),
+        )
 
     def unlink_portal_integration(self, device_id, integration_id=None, payload=None):
         """Unlink an integration using the portal's collection DELETE form."""
@@ -493,30 +793,50 @@ class FlumeClient:
         )
 
     def list_spans(self, device_id, **params):
-        return self.list_all(self._user_path("/devices/{0}/spans".format(device_id)), params, Span)
+        return self.list_all(
+            self._user_path("/devices/{0}/spans".format(device_id)), params, Span
+        )
 
     def update_span(self, device_id, span_id, payload):
-        return self.data("PATCH", self._user_path("/devices/{0}/spans/{1}".format(device_id, span_id)), json=payload)
+        return self.data(
+            "PATCH",
+            self._user_path("/devices/{0}/spans/{1}".format(device_id, span_id)),
+            json=payload,
+        )
 
     def update_span_type(self, device_id, span_id, span_type):
         """Set a span's type using the portal's exact payload shape."""
         return self.update_span(device_id, span_id, {"type": span_type})
 
     def list_span_types(self, location_id, **params):
-        return self.list_all(self._user_path("/locations/{0}/span-types".format(location_id)), params, SpanType)
+        return self.list_all(
+            self._user_path("/locations/{0}/span-types".format(location_id)),
+            params,
+            SpanType,
+        )
 
     def submit_feedback(self, device_id, payload):
-        return self.data("POST", self._user_path("/devices/{0}/feedback".format(device_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/feedback".format(device_id)),
+            json=payload,
+        )
 
     def submit_device_feedback(self, device_id, payload):
         """Submit device feedback through the portal route."""
         return self.submit_feedback(device_id, payload)
 
     def get_meter_accuracy(self, device_id):
-        return self.data("GET", self._user_path("/devices/{0}/meters/accuracy".format(device_id)))
+        return self.data(
+            "GET", self._user_path("/devices/{0}/meters/accuracy".format(device_id))
+        )
 
     def submit_meter_accuracy(self, device_id, payload):
-        return self.data("POST", self._user_path("/devices/{0}/meters/accuracy".format(device_id)), json=payload)
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/meters/accuracy".format(device_id)),
+            json=payload,
+        )
 
     def submit_meter_accuracy_readings(
         self,
@@ -544,7 +864,9 @@ class FlumeClient:
         )
 
     def initiate_accuracy_conversation(self, payload):
-        return self.data("POST", self._user_path("/initiate-accuracy-conversation"), json=payload)
+        return self.data(
+            "POST", self._user_path("/initiate-accuracy-conversation"), json=payload
+        )
 
     def start_accuracy_conversation(
         self,
@@ -578,7 +900,11 @@ class FlumeClient:
         )
 
     def list_purchase_options(self, device_id, **params):
-        return self.list_all(self._user_path("/devices/{0}/purchase-options".format(device_id)), params, PurchaseOption)
+        return self.list_all(
+            self._user_path("/devices/{0}/purchase-options".format(device_id)),
+            params,
+            PurchaseOption,
+        )
 
     def get_purchase_options(self, device_id):
         """Fetch device purchase options through the portal route."""

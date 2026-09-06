@@ -58,9 +58,18 @@ class FlumeModel:
             if isinstance(value, FlumeModel):
                 value = value.to_dict()
             elif isinstance(value, list):
-                value = [item.to_dict() if isinstance(item, FlumeModel) else item for item in value]
+                value = [
+                    item.to_dict() if isinstance(item, FlumeModel) else item
+                    for item in value
+                ]
             result[key] = deepcopy(value)
         return result
+
+    def update(self, values):
+        """Update model fields from a mapping and return the model."""
+        for key, value in values.items():
+            setattr(self, key, value)
+        return self
 
     def __repr__(self):
         return "{0}({1!r})".format(type(self).__name__, self.to_dict())
@@ -102,7 +111,9 @@ class User(FlumeModel):
 
     @property
     def name(self):
-        return " ".join(part for part in (self.first_name, self.last_name) if part).strip()
+        return " ".join(
+            part for part in (self.first_name, self.last_name) if part
+        ).strip()
 
 
 class Device(FlumeModel):
@@ -287,7 +298,16 @@ class DoNotAlertSchedule(FlumeModel):
         "next_end": "",
         "span_types": [],
         "rrule_str": "",
-        "rrule_obj": {"tzid": "", "dtstart": "", "freq": "", "interval": 0, "byweekday": [], "byhour": 0, "byminute": 0, "bysecond": 0},
+        "rrule_obj": {
+            "tzid": "",
+            "dtstart": "",
+            "freq": "",
+            "interval": 0,
+            "byweekday": [],
+            "byhour": 0,
+            "byminute": 0,
+            "bysecond": 0,
+        },
         "created_datetime": "",
         "updated_datetime": "",
     }
@@ -302,13 +322,25 @@ class LocationAccess(FlumeModel):
 class Integration(FlumeModel):
     """External device integration, including shutoff valves."""
 
-    defaults = {"id": None, "type": None, "state": None, "status": None, "device_id": None}
+    defaults = {
+        "id": None,
+        "type": None,
+        "state": None,
+        "status": None,
+        "device_id": None,
+    }
 
 
 class Span(FlumeModel):
     """Water-usage span/appliance classification."""
 
-    defaults = {"id": None, "device_id": None, "type": None, "start_datetime": None, "end_datetime": None}
+    defaults = {
+        "id": None,
+        "device_id": None,
+        "type": None,
+        "start_datetime": None,
+        "end_datetime": None,
+    }
 
 
 class SpanType(FlumeModel):
@@ -320,7 +352,12 @@ class SpanType(FlumeModel):
 class Leak(FlumeModel):
     """Leak status or leak event."""
 
-    defaults = {"id": None, "device_id": None, "active": False, "created_datetime": None}
+    defaults = {
+        "id": None,
+        "device_id": None,
+        "active": False,
+        "created_datetime": None,
+    }
 
 
 class PurchaseOption(FlumeModel):

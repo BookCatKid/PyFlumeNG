@@ -3,21 +3,21 @@
 from urllib.parse import parse_qs
 
 import pytest
+
 from pyflume import (
     Budget,
     Device,
-    FlumeAuth,
     FlumeClient,
     FlumePortalAuth,
     FlumeResponse,
     PersonalAuth,
     UsageAlertRule,
 )
-from pyflume.devices import FlumeDeviceList
-from pyflume.leak import FlumeLeakList
 from pyflume.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
 from pyflume.constants import API_BASE_URL, URL_OAUTH_TOKEN
+from pyflume.devices import FlumeDeviceList
 from pyflume.errors import FlumeRateLimitError
+from pyflume.leak import FlumeLeakList
 
 PortalAuth = FlumePortalAuth
 PORTAL_AUTHORIZE_URL = PORTAL_OAUTH_AUTHORIZE_URL
@@ -27,8 +27,8 @@ PORTAL_TOKEN_URL = PORTAL_OAUTH_TOKEN_URL
 
 TOKEN = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJ1c2VyX2lkIjoyNDM4NCwiZXhwIjoyOTk5OTk5OTk3LCJzY29wZSI6WyJyZWFkIl19."
-    "utb2yzcMImBFhDx_mssC_HU0mbfo0D_-VAQOetw5_h0"
+    "eyJ1c2VyX2lkIjoxMjM0NSwiZXhwIjoyOTk5OTk5OTk3LCJ4IjoiZmFrZSJ9."
+    "test-signature-pyflumeng"
 )
 
 
@@ -79,8 +79,12 @@ def test_portal_auth_uses_browser_oauth_flow(requests_mock):
         "POST",
         "POST",
     ]
-    assert requests_mock.request_history[1].headers["Content-Type"].startswith(
-        "application/x-www-form-urlencoded",
+    assert (
+        requests_mock.request_history[1]
+        .headers["Content-Type"]
+        .startswith(
+            "application/x-www-form-urlencoded",
+        )
     )
 
 
@@ -115,8 +119,7 @@ def test_usage_rule_read_does_not_change_legacy_usage_pagination(requests_mock):
 
     usage_url = "https://api.flumetech.com/users/12345/usage-alerts"
     rule_url = (
-        "https://api.flumetech.com/users/12345/devices/device/rules/"
-        "usage-alerts"
+        "https://api.flumetech.com/users/12345/devices/device/rules/" "usage-alerts"
     )
     requests_mock.get(
         usage_url,
@@ -174,10 +177,7 @@ def test_rate_limit_exposes_retry_after_and_envelope(requests_mock):
 
 def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
     """Rule updates use the portal-capable endpoint and preserve empty data."""
-    url = (
-        API_BASE_URL + "/users/12345/devices/device/rules/"
-        "usage-alerts/rule"
-    )
+    url = API_BASE_URL + "/users/12345/devices/device/rules/" "usage-alerts/rule"
     requests_mock.patch(url, json={"success": True, "code": 612, "data": []})
     client = FlumeClient(auth())
 
@@ -198,7 +198,8 @@ def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
         json={"success": True, "data": []},
     )
     requests_mock.patch(
-        API_BASE_URL + "/users/12345/devices/device/rules/usage-alerts/rule/do-not-alert-schedules",
+        API_BASE_URL
+        + "/users/12345/devices/device/rules/usage-alerts/rule/do-not-alert-schedules",
         json={"success": True, "data": []},
     )
     client = FlumeClient(auth())
@@ -262,7 +263,9 @@ def test_portal_list_helpers_follow_pagination(requests_mock):
         options,
         json={
             "data": [{"id": "option-one"}],
-            "pagination": {"next": "/users/12345/devices/device/purchase-options?offset=1"},
+            "pagination": {
+                "next": "/users/12345/devices/device/purchase-options?offset=1"
+            },
         },
     )
     requests_mock.get(
@@ -279,6 +282,41 @@ def test_portal_list_helpers_follow_pagination(requests_mock):
         "option-one",
         "option-two",
     ]
+
+
+def test_iter_pages_returns_typed_envelopes(requests_mock):
+    """Pagination can be consumed page-by-page with response metadata."""
+    url = API_BASE_URL + "/users/12345/devices"
+    requests_mock.get(
+        url,
+        json={
+            "success": True,
+            "data": [{"id": "one"}],
+            "pagination": {"next": "/users/12345/devices?offset=1"},
+        },
+    )
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices?offset=1",
+        json={"success": True, "data": [{"id": "two"}], "pagination": None},
+    )
+
+    pages = list(FlumeClient(auth()).iter_pages(url, model=Device))
+
+    assert pages[0].data[0].id == "one"
+    assert pages[0].next_url.endswith("offset=1")
+    assert pages[1].data[0].id == "two"
+
+
+def test_iter_pages_rejects_repeated_links(requests_mock):
+    """A broken server pagination link cannot hang the client."""
+    url = API_BASE_URL + "/users/12345/devices"
+    requests_mock.get(
+        url,
+        json={"data": [], "pagination": {"next": "/users/12345/devices"}},
+    )
+
+    with pytest.raises(RuntimeError, match="repeated next link"):
+        list(FlumeClient(auth()).iter_pages(url))
 
 
 def test_models_follow_portal_shapes_and_preserve_unknown_fields():

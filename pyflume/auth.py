@@ -272,12 +272,16 @@ class FlumePortalAuth:  # noqa: WPS214
                 "Portal authorization did not return a valid code.",
             )
 
-        self._load_token(self._request_portal_token({
-            "client_id": PORTAL_CLIENT_ID,
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": PORTAL_REDIRECT_URI,
-        }))
+        self._load_token(
+            self._request_portal_token(
+                {
+                    "client_id": PORTAL_CLIENT_ID,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": PORTAL_REDIRECT_URI,
+                }
+            )
+        )
 
     def refresh_token(self):
         """Refresh the portal token using its form-encoded refresh flow."""
