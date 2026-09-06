@@ -41,6 +41,7 @@ class FlumeClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.last_response = None
+        self.rate_limit = getattr(auth, "rate_limit", None)
 
     def request(self, method, path, params=None, json=None, data=None, **kwargs):
         """Return the complete Flume response envelope.
@@ -68,6 +69,8 @@ class FlumeClient:
                 **kwargs,
             )
             self.last_response = response
+            if self.rate_limit is not None:
+                self.rate_limit.update_from_headers(response.headers)
             try:
                 envelope = response.json()
             except ValueError as exc:

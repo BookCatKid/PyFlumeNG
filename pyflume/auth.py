@@ -17,6 +17,7 @@ from .constants import (  # noqa: WPS300
     PORTAL_REDIRECT_URI,
     URL_OAUTH_TOKEN,
 )
+from .rate_limit import RateLimitState  # noqa: WPS300
 from .utils import (  # noqa: WPS300
     FlumeResponseError,
     configure_logger,
@@ -72,6 +73,7 @@ class FlumeAuth:  # noqa: WPS214
         self._decoded_token = None
         self.user_id = None
         self.authorization_header = None
+        self.rate_limit = RateLimitState(120)
 
         self._load_token(flume_token)
         self._verify_token()
@@ -210,6 +212,7 @@ class FlumePortalAuth:  # noqa: WPS214
         self._decoded_token = None
         self.user_id = None
         self.authorization_header = None
+        self.rate_limit = RateLimitState(72000)
 
         if flume_token is None:
             self.retrieve_token()

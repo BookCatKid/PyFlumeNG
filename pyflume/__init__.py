@@ -42,6 +42,7 @@ from .models import (  # noqa: WPS300, F401
     User,
 )
 from .notifications import FlumeNotificationList  # noqa: WPS300, F401
+from .rate_limit import RateLimitState  # noqa: WPS300, F401
 from .usage import FlumeUsageAlertList  # noqa: WPS300, F401
 
 __all__ = [
@@ -77,6 +78,7 @@ __all__ = [
     "Contact",
     "Insurer",
     "ApiClient",
+    "RateLimitState",
     "FlumeError",
     "FlumeAuthError",
     "FlumeHTTPError",

@@ -18,6 +18,7 @@ from pyflume.constants import API_BASE_URL, URL_OAUTH_TOKEN
 from pyflume.devices import FlumeDeviceList
 from pyflume.errors import FlumeRateLimitError
 from pyflume.leak import FlumeLeakList
+from pyflume.rate_limit import RateLimitState
 
 PortalAuth = FlumePortalAuth
 PORTAL_AUTHORIZE_URL = PORTAL_OAUTH_AUTHORIZE_URL
@@ -173,6 +174,41 @@ def test_rate_limit_exposes_retry_after_and_envelope(requests_mock):
 
     assert error.value.retry_after == "60"
     assert error.value.code == 429
+
+
+def test_rate_limit_uses_auth_baseline_and_server_headers(requests_mock):
+    """Auth type supplies a baseline that live headers can replace."""
+    assert auth().rate_limit.limit == 120
+    assert (
+        PortalAuth("user@example.com", "password", flume_token=token()).rate_limit.limit
+        == 72000
+    )
+
+    requests_mock.get(
+        API_BASE_URL + "/users/12345",
+        headers={
+            "X-RateLimit-Limit": "17",
+            "X-RateLimit-Remaining": "9",
+            "X-RateLimit-Reset": "1788685189",
+        },
+        json={"success": True, "data": [{"id": 12345}]},
+    )
+    client = FlumeClient(auth())
+    client.get_user()
+
+    assert client.rate_limit.limit == 17
+    assert client.rate_limit.remaining == 9
+    assert client.rate_limit.reset == 1788685189
+    assert client.rate_limit.reset_at.tzinfo is not None
+
+
+def test_rate_limit_state_ignores_invalid_header_values():
+    """Malformed optional headers do not destroy known rate-limit state."""
+    state = RateLimitState(120)
+    state.update_from_headers({"X-RateLimit-Limit": "bad", "Retry-After": "3"})
+
+    assert state.limit == 120
+    assert state.retry_after == "3"
 
 
 def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
