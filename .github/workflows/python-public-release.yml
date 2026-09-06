@@ -17,6 +17,7 @@ jobs:
     permissions:
       # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
+      contents: write
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python
@@ -31,5 +32,10 @@ jobs:
       run: python -m build
     - name: Check distributions
       run: python -m twine check dist/*
+    - name: Upload distributions to GitHub release
+      if: github.event_name == 'release'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber
     - name: Publish package distributions to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
