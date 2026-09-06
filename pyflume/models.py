@@ -40,8 +40,6 @@ class FlumeModel:
     def __eq__(self, other):
         if isinstance(other, FlumeModel):
             return self.to_dict() == other.to_dict()
-        if isinstance(other, dict):
-            return all(self.get(key) == value for key, value in other.items())
         return NotImplemented
 
     def keys(self):
@@ -376,6 +374,27 @@ class Insurer(FlumeModel):
 
 class ApiClient(FlumeModel):
     """Generated Personal API client metadata."""
+
+
+class ProService(FlumeModel):
+    """Local professional service listing displayed by the portal."""
+
+    defaults = {"name": None, "url": None}
+
+
+class AccuracyResult(FlumeModel):
+    """Meter-accuracy precheck or comparison result."""
+
+    defaults = {
+        "type": None,
+        "title": None,
+        "description": None,
+        "accuracy": None,
+        "since_url": None,
+        "until_url": None,
+        "reading_diff": None,
+        "queried_diff": None,
+    }
 
 
 class LocationProfiles(FlumeModel):

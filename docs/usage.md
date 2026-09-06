@@ -77,7 +77,7 @@ if usage_alert_list_obj.has_next:
 ## Managing usage alert rules (enable / disable)
 ```python
 device_id = "test-device-01"
-rule_id = test-rule-01
+rule_id = "test-rule-01"
 
 # List rules / fetch one rule
 rules = usage_alert_list_obj.get_usage_alert_rules(device_id)

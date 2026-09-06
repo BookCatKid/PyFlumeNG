@@ -7,6 +7,7 @@ from requests import Session
 from .constants import API_BASE_URL
 from .errors import FlumeCapabilityError, FlumeHTTPError, FlumeRateLimitError
 from .models import (
+    AccuracyResult,
     ApiClient,
     Budget,
     Contact,
@@ -21,6 +22,7 @@ from .models import (
     LocationAccess,
     LocationProfiles,
     Notification,
+    ProService,
     PurchaseOption,
     QueryResult,
     Span,
@@ -852,7 +854,9 @@ class FlumeClient:
 
     def get_meter_accuracy(self, device_id):
         return self.data(
-            "GET", self._user_path("/devices/{0}/meters/accuracy".format(device_id))
+            "GET",
+            self._user_path("/devices/{0}/meters/accuracy".format(device_id)),
+            AccuracyResult,
         )
 
     def submit_meter_accuracy(self, device_id, payload):
@@ -935,7 +939,7 @@ class FlumeClient:
         return self.list_purchase_options(device_id)
 
     def list_pro_services(self, **params):
-        return self.list_all("/pro-services", params)
+        return self.list_all("/pro-services", params, ProService)
 
     def list_insurers(self, **params):
         return self.list_all("/insurers", params, Insurer)

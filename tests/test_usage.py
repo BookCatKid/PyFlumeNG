@@ -56,6 +56,7 @@ class TestFlumeUsageAlerts(unittest.TestCase):
         flume_alerts = pyflume.FlumeUsageAlertList(flume_auth)
         alerts = flume_alerts.get_usage_alerts()
         assert len(alerts) == 50  # noqa: S101, WPS432
+        assert isinstance(alerts[0], pyflume.UsageAlert)  # noqa: S101
         assert alerts[0]["device_id"] == "6248148189204194987"  # noqa: S101
         assert alerts[0]["event_rule_name"] == "High Flow Alert"  # noqa: S101
         assert flume_alerts.has_next  # noqa: S101
@@ -144,6 +145,7 @@ class TestFlumeUsageAlerts(unittest.TestCase):
 
         rules = flume_alerts.get_usage_alert_rules(device_id)
         assert len(rules) == 2  # noqa: S101
+        assert isinstance(rules[0], pyflume.UsageAlertRule)  # noqa: S101
         assert rules[0]["id"] == rule_id  # noqa: S101
         assert rules[0]["active"]  # noqa: S101
 

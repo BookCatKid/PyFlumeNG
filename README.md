@@ -16,7 +16,7 @@ The Python import remains `pyflume` for compatibility:
 ```python
 import pyflume
 
-auth = pyflume.FlumeAuth(
+auth = pyflume.PortalAuth(
     username="your_email",
     password="your_password",
 )

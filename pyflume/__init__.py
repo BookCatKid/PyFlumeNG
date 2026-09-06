@@ -18,6 +18,7 @@ from .errors import (  # noqa: WPS300, F401
 )
 from .leak import FlumeLeakList  # noqa: WPS300, F401
 from .models import (  # noqa: WPS300, F401
+    AccuracyResult,
     ApiClient,
     Budget,
     Contact,
@@ -33,6 +34,7 @@ from .models import (  # noqa: WPS300, F401
     LocationAccess,
     LocationProfiles,
     Notification,
+    ProService,
     PurchaseOption,
     QueryResult,
     Span,
@@ -50,6 +52,7 @@ __all__ = [
     "FlumeAuth",
     "PersonalAuth",
     "FlumePortalAuth",
+    "PortalAuth",
     "FlumeClient",
     "FlumeData",
     "FlumeDeviceList",
@@ -79,6 +82,8 @@ __all__ = [
     "Contact",
     "Insurer",
     "ApiClient",
+    "AccuracyResult",
+    "ProService",
     "RateLimitState",
     "FlumeError",
     "FlumeAuthError",

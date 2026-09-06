@@ -5,6 +5,7 @@ from urllib.parse import parse_qs
 import pytest
 
 from pyflume import (
+    AccuracyResult,
     Budget,
     Device,
     FlumeClient,
@@ -139,7 +140,10 @@ def test_usage_rule_read_does_not_change_legacy_usage_pagination(requests_mock):
     legacy = FlumeUsageAlertList(auth())
     legacy.get_usage_alert_rules("device")
 
-    assert legacy.get_next_usage_alerts() == [{"id": 2}]
+    next_alerts = legacy.get_next_usage_alerts()
+    assert len(next_alerts) == 1
+    assert next_alerts[0].id == 2
+    assert legacy.has_next is False
 
 
 def test_client_refreshes_once_after_401(requests_mock):
@@ -292,6 +296,30 @@ def test_portal_accuracy_payload_wrapper(requests_mock):
         "until_image": "after-image",
         "units": "GALLONS",
     }
+
+
+def test_meter_accuracy_keeps_api_list_shape_and_types_items(requests_mock):
+    """Accuracy normalization must not collapse Flume's data list."""
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices/device/meters/accuracy",
+        json={
+            "success": True,
+            "data": [
+                {
+                    "type": "ACCURACY",
+                    "title": None,
+                    "description": None,
+                },
+            ],
+        },
+    )
+
+    result = FlumeClient(auth()).get_meter_accuracy("device")
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert isinstance(result[0], AccuracyResult)
+    assert result[0].type == "ACCURACY"
 
 
 def test_portal_list_helpers_follow_pagination(requests_mock):

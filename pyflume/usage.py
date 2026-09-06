@@ -207,7 +207,7 @@ class FlumeUsageAlertList:
             query_string (object): query string options
             update_pagination (bool): Whether to update usage-alert list
                 pagination state for this request.
-            model (type): Model used to parse response data.
+            model (type): Model used to normalize response data.
 
         Returns:
             object: Reponse in JSON format from API.
@@ -240,4 +240,4 @@ class FlumeUsageAlertList:
             self.has_next = False
             self.next_page = None
             LOGGER.debug("No further pages for Usage results.")
-        return modelize(response_json["data"], UsageAlert)
+        return modelize(response_json["data"], model)
