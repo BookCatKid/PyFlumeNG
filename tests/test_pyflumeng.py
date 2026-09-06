@@ -16,7 +16,7 @@ from pyflume import (
 from pyflume.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
 from pyflume.constants import API_BASE_URL, URL_OAUTH_TOKEN
 from pyflume.devices import FlumeDeviceList
-from pyflume.errors import FlumeRateLimitError
+from pyflume.errors import FlumeCapabilityError, FlumeRateLimitError
 from pyflume.leak import FlumeLeakList
 from pyflume.rate_limit import RateLimitState
 
@@ -105,7 +105,9 @@ def test_client_returns_envelope_and_follows_pagination(requests_mock):
         next_url,
         json={"success": True, "data": [{"id": "second"}], "pagination": None},
     )
-    client = FlumeClient(auth())
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
 
     envelope = client.request("GET", "/users/12345/devices", params={"limit": 1})
     devices = client.list_all("/users/12345/devices", {"limit": 1})
@@ -215,12 +217,24 @@ def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
     """Rule updates use the portal-capable endpoint and preserve empty data."""
     url = API_BASE_URL + "/users/12345/devices/device/rules/" "usage-alerts/rule"
     requests_mock.patch(url, json={"success": True, "code": 612, "data": []})
-    client = FlumeClient(auth())
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
 
     result = client.set_usage_alert_rule_active("device", "rule", False)
 
     assert result == []
     assert requests_mock.last_request.json() == {"active": False}
+
+
+def test_personal_auth_rejects_portal_rule_write_before_transport(requests_mock):
+    """Personal auth reports missing portal capability without an HTTP call."""
+    client = FlumeClient(auth())
+
+    with pytest.raises(FlumeCapabilityError, match="PortalAuth"):
+        client.set_usage_alert_rule_active("device", "rule", False)
+
+    assert requests_mock.call_count == 0
 
 
 def test_portal_resource_wrappers_match_frontend_routes(requests_mock):

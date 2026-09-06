@@ -11,6 +11,7 @@ from .data import FlumeData  # noqa: WPS300, F401
 from .devices import FlumeDeviceList  # noqa: WPS300, F401
 from .errors import (  # noqa: WPS300, F401
     FlumeAuthError,
+    FlumeCapabilityError,
     FlumeError,
     FlumeHTTPError,
     FlumeRateLimitError,
@@ -81,6 +82,7 @@ __all__ = [
     "RateLimitState",
     "FlumeError",
     "FlumeAuthError",
+    "FlumeCapabilityError",
     "FlumeHTTPError",
     "FlumeRateLimitError",
 ]

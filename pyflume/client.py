@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 from requests import Session
 
 from .constants import API_BASE_URL
-from .errors import FlumeHTTPError, FlumeRateLimitError
+from .errors import FlumeCapabilityError, FlumeHTTPError, FlumeRateLimitError
 from .models import (
     ApiClient,
     Budget,
@@ -93,6 +93,9 @@ class FlumeClient:
 
     def data(self, method, path, model=None, **kwargs):
         """Return the response data parsed into portal-shaped models."""
+        required_capability = kwargs.pop("requires_capability", None)
+        if required_capability is not None:
+            self._require_capability(required_capability)
         return self.response(method, path, model=model, **kwargs).data
 
     def response(self, method, path, model=None, **kwargs):
@@ -137,6 +140,14 @@ class FlumeClient:
 
     def _user_path(self, suffix=""):
         return "/users/{0}{1}".format(self.auth.user_id, suffix)
+
+    def _require_capability(self, capability):
+        """Raise before transport when auth lacks a named capability."""
+        if capability not in getattr(self.auth, "capabilities", frozenset()):
+            raise FlumeCapabilityError(
+                "This operation requires '{0}'. Use PortalAuth instead of "
+                "PersonalAuth.".format(capability),
+            )
 
     # Documented user, device, query, and flow routes.
     def get_user(self):
@@ -216,6 +227,7 @@ class FlumeClient:
 
     def create_portal_location(self, payload):
         """Create a location through the portal's root location route."""
+        self._require_capability("portal_writes")
         return self.data("POST", "/locations", json=payload)
 
     def update_location(self, location_id, payload):
@@ -225,6 +237,7 @@ class FlumeClient:
 
     def update_portal_location(self, location_id, payload):
         """Update a location through the portal's root location route."""
+        self._require_capability("portal_writes")
         return self.data("PATCH", "/locations/{0}".format(location_id), json=payload)
 
     def update_user(self, payload):
@@ -232,6 +245,7 @@ class FlumeClient:
 
     def update_portal_user(self, payload):
         """Update the current user through the portal's collection route."""
+        self._require_capability("portal_writes")
         return self.data("PATCH", "/users/{0}".format(self.auth.user_id), json=payload)
 
     def update_password(self, payload):
@@ -270,6 +284,7 @@ class FlumeClient:
 
     def update_portal_notification(self, notification_id, payload):
         """Update a notification through the portal's root route."""
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH", "/notifications/{0}".format(notification_id), json=payload
         )
@@ -281,6 +296,7 @@ class FlumeClient:
 
     def delete_portal_notification(self, notification_id):
         """Delete a notification through the portal's root route."""
+        self._require_capability("portal_writes")
         return self.data("DELETE", "/notifications/{0}".format(notification_id))
 
     def set_notification_read(self, notification_id, read=True, portal=True):
@@ -340,11 +356,13 @@ class FlumeClient:
 
     def create_portal_usage_alert_rule(self, device_id, payload):
         """Create a rule through the portal's root device route."""
+        self._require_capability("portal_writes")
         return self.data(
             "POST", "/devices/{0}/rules/usage-alerts".format(device_id), json=payload
         )
 
     def update_usage_alert_rule(self, device_id, rule_id, payload):
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             self._user_path(
@@ -355,6 +373,7 @@ class FlumeClient:
 
     def update_portal_usage_alert_rule(self, device_id, rule_id, payload):
         """Update a rule using the portal service's collection PATCH form."""
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id),
@@ -371,6 +390,7 @@ class FlumeClient:
 
     def delete_portal_usage_alert_rule(self, device_id, rule_id):
         """Delete a rule through the portal service's collection route."""
+        self._require_capability("portal_writes")
         return self.data(
             "DELETE", "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
         )
@@ -382,6 +402,7 @@ class FlumeClient:
 
     def set_portal_usage_alert_rule_active(self, device_id, rule_id, active):
         """Toggle a rule using the portal service's collection PATCH form."""
+        self._require_capability("portal_writes")
         return self.update_portal_usage_alert_rule(
             device_id,
             rule_id,

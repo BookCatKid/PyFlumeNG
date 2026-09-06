@@ -31,6 +31,8 @@ LOGGER = configure_logger(__name__)
 class FlumeAuth:  # noqa: WPS214
     """Interact with API Authentication."""
 
+    capabilities = frozenset({"personal_api"})
+
     def __init__(  # noqa: WPS211
         self,
         username,
@@ -194,6 +196,8 @@ class FlumePortalAuth:  # noqa: WPS214
     scope, but usage-alert rule writes require the portal's ``customer-portal``
     client and its broader ``update`` scope.
     """
+
+    capabilities = frozenset({"personal_api", "portal_api", "portal_writes"})
 
     def __init__(
         self,

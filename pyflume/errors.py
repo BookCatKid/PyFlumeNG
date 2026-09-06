@@ -9,6 +9,10 @@ class FlumeAuthError(FlumeError):
     """Raised when authentication or token exchange fails."""
 
 
+class FlumeCapabilityError(FlumeError):
+    """Raised when an auth flow lacks a required API capability."""
+
+
 class FlumeHTTPError(FlumeError):
     """Raised for a non-successful Flume API response."""
 
