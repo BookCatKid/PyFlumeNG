@@ -31,16 +31,34 @@ Returns True if the next page exists. Used internally to handle pagination.
 `_get_usage_request(api_url, query_string)`
 Makes an API request to get usage alerts from the Flume API.
 
+Usage Alert Rules
+
+`get_usage_alert_rules(device_id)`
+Method to return all usage alert rules configured for a device. This corresponds to `GET /users/{user_id}/devices/{device_id}/rules/usage-alerts`.
+
+`get_usage_alert_rule(device_id, rule_id)`
+Method to return a single usage alert rule. This corresponds to `GET /users/{user_id}/devices/{device_id}/rules/usage-alerts/{rule_id}`.
+
+`update_usage_alert_rule(device_id, rule_id, payload)`
+Method to patch a usage alert rule. This corresponds to `PATCH /users/{user_id}/devices/{device_id}/rules/usage-alerts/{rule_id}`, e.g. `{"active": False}`.
+
+> **Limitation (verified 2026-09-06 against live API):** the Flume
+> **Personal API token** (OAuth password/refresh flow, `read:personal`
+> scope) returns `404 "The route requested is not defined"` for writes.
+> Use `FlumePortalAuth` for rule updates; it runs the same authorization-code
+> flow as the customer portal and obtains the required `customer-portal`
+> scoped bearer token.
+
+`set_usage_alert_rule_active(device_id, rule_id, active)`
+Convenience wrapper around `update_usage_alert_rule` to enable (`True`) or disable (`False`) a rule.
+
 ## Example
 ```python
 import pyflume
-auth = pyflume.FlumeAuth(
+auth = pyflume.FlumePortalAuth(
     username='your_username',
     password='your_password',
-    client_id='client_id',
-    client_secret='client_secret'
 )
-auth.retrieve_token()
 
 usage_alert_list_obj = pyflume.FlumeUsageAlertList(
     flume_auth=auth
@@ -54,4 +72,23 @@ For subsequent pages:
 if usage_alert_list_obj.has_next:
     next_page_alerts = usage_alert_list_obj.get_next_usage_alerts()
     print(next_page_alerts)  # Prints the JSON list of usage alerts for the next page
+```
+
+## Managing usage alert rules (enable / disable)
+```python
+device_id = "test-device-01"
+rule_id = test-rule-01
+
+# List rules / fetch one rule
+rules = usage_alert_list_obj.get_usage_alert_rules(device_id)
+rule = usage_alert_list_obj.get_usage_alert_rule(device_id, rule_id)
+
+# Disable a rule (equivalent to PATCH {"active": False})
+usage_alert_list_obj.set_usage_alert_rule_active(device_id, rule_id, False)
+
+# Re-enable it
+usage_alert_list_obj.set_usage_alert_rule_active(device_id, rule_id, True)
+
+# Generic patch (e.g. other rule fields when supported)
+usage_alert_list_obj.update_usage_alert_rule(device_id, rule_id, {"active": False})
 ```

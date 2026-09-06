@@ -4,6 +4,7 @@ build/*
 dist/*
 pyflume/__pycache__
 PyFlume.egg-info
+PyFlumeNG.egg-info
 .idea/*
 .vscode
 .vscode/*

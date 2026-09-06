@@ -2,7 +2,13 @@
 
 from requests import Session
 
-from .constants import API_BASE_URL, API_USAGE_URL, DEFAULT_TIMEOUT  # noqa: WPS300
+from .constants import (  # noqa: WPS300
+    API_BASE_URL,
+    API_USAGE_RULE_URL,
+    API_USAGE_RULES_URL,
+    API_USAGE_URL,
+    DEFAULT_TIMEOUT,
+)
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -75,6 +81,90 @@ class FlumeUsageAlertList:
             raise ValueError("No next page available.")
         return self._get_usage_request(api_url, query_string)
 
+    def get_usage_alert_rules(self, device_id):
+        """Return usage alert rules configured for a device.
+
+        Args:
+            device_id (string): Device ID owning the rules.
+
+        Returns:
+            Returns JSON list of usage alert rules.
+        """
+        api_url = API_USAGE_RULES_URL.format(
+            user_id=self._flume_auth.user_id,
+            device_id=device_id,
+        )
+        return self._get_usage_request(api_url, {}, update_pagination=False)
+
+    def get_usage_alert_rule(self, device_id, rule_id):
+        """Return a single usage alert rule for a device.
+
+        Args:
+            device_id (string): Device ID owning the rule.
+            rule_id (string/int): Usage alert rule ID.
+
+        Returns:
+            Returns JSON object (or single-element list) for the rule.
+        """
+        api_url = API_USAGE_RULE_URL.format(
+            user_id=self._flume_auth.user_id,
+            device_id=device_id,
+            rule_id=rule_id,
+        )
+        return self._get_usage_request(api_url, {}, update_pagination=False)
+
+    def update_usage_alert_rule(self, device_id, rule_id, payload):
+        """Update a usage alert rule for a device.
+
+        Example:
+            update_usage_alert_rule(device_id, rule_id, {"active": False})
+
+        Args:
+            device_id (string): Device ID owning the rule.
+            rule_id (string/int): Usage alert rule ID.
+            payload (dict): Fields to patch, e.g. {"active": False}.
+
+        Returns:
+            object: Response data from API. Note: live API returns an empty
+                list on PATCH success, so re-GET the rule to verify state.
+        """
+        api_url = API_USAGE_RULE_URL.format(
+            user_id=self._flume_auth.user_id,
+            device_id=device_id,
+            rule_id=rule_id,
+        )
+        response = self._http_session.request(
+            "PATCH",
+            api_url,
+            headers=self._flume_auth.authorization_header,
+            json=payload,
+            timeout=self._timeout,
+        )
+
+        LOGGER.debug(f"update_usage_alert_rule Response: {response.text}")
+
+        # Check for response errors.
+        flume_response_error("Impossible to update usage alert rule", response)
+
+        return response.json()["data"]
+
+    def set_usage_alert_rule_active(self, device_id, rule_id, active):
+        """Enable or disable a usage alert rule for a device.
+
+        Args:
+            device_id (string): Device ID owning the rule.
+            rule_id (string/int): Usage alert rule ID.
+            active (bool): True to enable the rule, False to disable it.
+
+        Returns:
+            object: Response in JSON format from API.
+        """
+        return self.update_usage_alert_rule(
+            device_id,
+            rule_id,
+            {"active": bool(active)},
+        )
+
     def _has_next_page(self, response_json):
         """Return True if the next page exists.
 
@@ -92,12 +182,14 @@ class FlumeUsageAlertList:
             and response_json["pagination"]["next"] is not None
         )
 
-    def _get_usage_request(self, api_url, query_string):
+    def _get_usage_request(self, api_url, query_string, update_pagination=True):
         """Make an API request to get usage alerts from the Flume API.
 
         Args:
             api_url (string): URL for request
             query_string (object): query string options
+            update_pagination (bool): Whether to update usage-alert list
+                pagination state for this request.
 
         Returns:
             object: Reponse in JSON format from API.
@@ -117,6 +209,9 @@ class FlumeUsageAlertList:
         flume_response_error("Impossible to retrieve usage alert", response)
 
         response_json = response.json()
+        if not update_pagination:
+            return response_json["data"]
+
         if self._has_next_page(response_json):
             self.next_page = response_json["pagination"]["next"]
             self.has_next = True

@@ -1,0 +1,20 @@
+{
+    "success": true,
+    "code": 602,
+    "message": "Request OK",
+    "http_code": 200,
+    "http_message": "OK",
+    "detailed": null,
+    "data": [
+        {
+            "id": "test-rule-01",
+            "name": "High Flow Alert",
+            "active": false,
+            "flow_rate": 15,
+            "duration": 10,
+            "notify_every": 60
+        }
+    ],
+    "count": 1,
+    "pagination": null
+}

@@ -1,4 +1,4 @@
-"""PyFlume setuptools for PyPi."""
+"""PyFlumeNG setuptools configuration."""
 
 import setuptools
 
@@ -6,11 +6,11 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="PyFlume",
-    version="0.8.7",
+    name="PyFlumeNG",
+    version="1.0.0",
     author="ChrisMandich",
     author_email="Chris@Mandich.net",
-    description="Package to integrate with Flume Sensor",
+    description="Complete Flume API client with Personal API and portal capabilities",
     long_description_content_type="text/markdown",
     long_description=long_description,
     url="https://github.com/ChrisMandich/PyFlume",

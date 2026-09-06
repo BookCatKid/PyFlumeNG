@@ -2,12 +2,26 @@
 
 from datetime import datetime, timedelta
 import json
+from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 import jwt  # install pyjwt
 from requests import Session
 
-from .constants import DEFAULT_TIMEOUT, URL_OAUTH_TOKEN  # noqa: WPS300
-from .utils import configure_logger, flume_response_error  # noqa: WPS300
+from .constants import (  # noqa: WPS300
+    DEFAULT_TIMEOUT,
+    PORTAL_API_URL,
+    PORTAL_CLIENT_ID,
+    PORTAL_OAUTH_AUTHORIZE_URL,
+    PORTAL_OAUTH_TOKEN_URL,
+    PORTAL_REDIRECT_URI,
+    URL_OAUTH_TOKEN,
+)
+from .utils import (  # noqa: WPS300
+    FlumeResponseError,
+    configure_logger,
+    flume_response_error,
+)
 
 # Configure logging
 LOGGER = configure_logger(__name__)
@@ -85,6 +99,14 @@ class FlumeAuth:  # noqa: WPS214
 
         self._load_token(self._request_token(payload))
 
+    def refresh(self):
+        """Refresh through the common PyFlumeNG auth interface."""
+        self.refresh_token()
+
+    def ensure_valid(self):
+        """Refresh when the token expires within twelve hours."""
+        self._verify_token()
+
     def retrieve_token(self):
         """Return authorization token for session."""
 
@@ -159,5 +181,154 @@ class FlumeAuth:  # noqa: WPS214
         LOGGER.debug("Token expiration time: %s", token_expiration)  # noqa: WPS323
         LOGGER.debug("Token comparison time: %s", time_difference)  # noqa: WPS323
 
+        if token_expiration <= time_difference:
+            self.refresh_token()
+
+
+class FlumePortalAuth:  # noqa: WPS214
+    """Authenticate using the customer portal OAuth authorization-code flow.
+
+    The Personal API password grant produces a token with ``update:personal``
+    scope, but usage-alert rule writes require the portal's ``customer-portal``
+    client and its broader ``update`` scope.
+    """
+
+    def __init__(
+        self,
+        username,
+        password,
+        flume_token=None,
+        http_session=None,
+        timeout=DEFAULT_TIMEOUT,
+    ):
+        """Initialize portal authentication."""
+        self._username = username
+        self._password = password
+        self._timeout = timeout
+        self._http_session = http_session or Session()
+        self._token = None
+        self._decoded_token = None
+        self.user_id = None
+        self.authorization_header = None
+
+        if flume_token is None:
+            self.retrieve_token()
+        else:
+            self._load_token(flume_token)
+        self._verify_token()
+
+    @property
+    def token(self):
+        """Return the current portal token response."""
+        return self._token
+
+    def retrieve_token(self):
+        """Authenticate through the portal and exchange the authorization code."""
+        state = uuid4().hex
+        response = self._http_session.get(
+            PORTAL_API_URL + "/account/login",
+            params={
+                "client_id": PORTAL_CLIENT_ID,
+                "redirect_uri": PORTAL_REDIRECT_URI,
+                "state": state,
+                "response_type": "code",
+            },
+            timeout=self._timeout,
+        )
+        flume_response_error("Can't open portal login", response)
+        response = self._http_session.post(
+            PORTAL_OAUTH_AUTHORIZE_URL,
+            data={
+                "username": self._username,
+                "password": self._password,
+                "response_type": "code",
+                "client_id": PORTAL_CLIENT_ID,
+                "redirect_uri": PORTAL_REDIRECT_URI,
+                "state": state,
+            },
+            allow_redirects=False,
+            timeout=self._timeout,
+        )
+
+        if response.status_code not in (301, 302, 303, 307, 308):
+            raise FlumeResponseError(
+                "Can't authorize user {0}. Response code returned:{1}.".format(
+                    self._username,
+                    response.status_code,
+                ),
+            )
+
+        location = response.headers.get("Location")
+        params = parse_qs(urlparse(location or "").query)
+        code = params.get("code", [None])[0]
+        returned_state = params.get("state", [None])[0]
+        error = params.get("error", [None])[0]
+        if error:
+            raise FlumeResponseError(
+                "Portal authorization failed: {0}".format(error),
+            )
+        if code is None or returned_state != state:
+            raise FlumeResponseError(
+                "Portal authorization did not return a valid code.",
+            )
+
+        self._load_token(self._request_portal_token({
+            "client_id": PORTAL_CLIENT_ID,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": PORTAL_REDIRECT_URI,
+        }))
+
+    def refresh_token(self):
+        """Refresh the portal token using its form-encoded refresh flow."""
+        response = self._http_session.post(
+            PORTAL_OAUTH_TOKEN_URL,
+            data=(
+                "grant_type=refresh_token&client_id={0}&refresh_token={1}".format(
+                    PORTAL_CLIENT_ID,
+                    self._token["refresh_token"],
+                )
+            ),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=self._timeout,
+        )
+        flume_response_error("Can't refresh portal token", response)
+        self._load_token(response.json()["data"][0])
+
+    def refresh(self):
+        """Refresh through the common PyFlumeNG auth interface."""
+        self.refresh_token()
+
+    def ensure_valid(self):
+        """Refresh when the token expires within twelve hours."""
+        self._verify_token()
+
+    def _load_token(self, token):
+        """Update token, user ID, decoded claims, and authorization header."""
+        self._token = token
+        self._decoded_token = jwt.decode(
+            token["access_token"],
+            options={"verify_signature": False},
+        )
+        self.user_id = self._decoded_token["user_id"]
+        self.authorization_header = {
+            "authorization": "Bearer {0}".format(token["access_token"]),
+        }
+
+    def _request_portal_token(self, payload):
+        """Exchange a portal authorization code for an access token."""
+        response = self._http_session.post(
+            PORTAL_OAUTH_TOKEN_URL,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=self._timeout,
+        )
+        flume_response_error("Can't get portal token", response)
+        return response.json()["data"][0]
+
+    def _verify_token(self):
+        """Refresh when the token expires within twelve hours."""
+        token_expiration = datetime.fromtimestamp(self._decoded_token["exp"])
+        time_difference = datetime.now() + timedelta(hours=12)  # noqa: WPS432
         if token_expiration <= time_difference:
             self.refresh_token()

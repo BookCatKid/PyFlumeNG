@@ -2,6 +2,7 @@
 
 # Standard library imports
 import unittest
+from urllib.parse import parse_qs
 
 # Third-party imports
 from requests import Session
@@ -50,3 +51,38 @@ class TestFlumeAuth(unittest.TestCase):
             http_session=Session(),
         )
         assert auth.user_id == CONST_USER_ID  # noqa: S101
+
+    @requests_mock.Mocker()
+    def test_portal_auth(self, mock):
+        """Test the customer portal authorization-code flow."""
+        mock.register_uri(
+            "get",
+            pyflume.constants.PORTAL_API_URL + "/account/login",
+            text="<form />",
+        )
+
+        def authorize(request, context):
+            state = parse_qs(request.text)["state"][0]
+            context.status_code = 302
+            context.headers["Location"] = (
+                "{0}?code=test-code&state={1}".format(
+                    pyflume.constants.PORTAL_REDIRECT_URI,
+                    state,
+                )
+            )
+            return ""
+
+        mock.register_uri(
+            "post",
+            pyflume.constants.PORTAL_OAUTH_AUTHORIZE_URL,
+            text=authorize,
+        )
+        mock.register_uri(
+            "post",
+            pyflume.constants.PORTAL_OAUTH_TOKEN_URL,
+            text=load_fixture(CONST_TOKEN_FILE),
+        )
+
+        auth = pyflume.FlumePortalAuth(CONST_USERNAME, CONST_PASSWORD)
+        assert auth.user_id == CONST_USER_ID  # noqa: S101
+        assert auth.authorization_header["authorization"].startswith("Bearer ")
