@@ -9,6 +9,7 @@ from pyflume import (
     FlumeAuth,
     FlumeClient,
     FlumePortalAuth,
+    FlumeResponse,
     PersonalAuth,
     UsageAlertRule,
 )
@@ -301,6 +302,26 @@ def test_models_follow_portal_shapes_and_preserve_unknown_fields():
     assert isinstance(Budget({"id": 1}), Budget)
 
 
+def test_rule_nested_schedules_round_trip_as_portal_models():
+    """Usage-alert schedules are typed and serialize back to API-shaped data."""
+    rule = UsageAlertRule(
+        {
+            "id": 1,
+            "schedules": [
+                {
+                    "id": 16158,
+                    "name": "Grass Watering",
+                    "currently_active": True,
+                },
+            ],
+        },
+    )
+
+    assert rule.schedules[0].name == "Grass Watering"
+    assert rule.schedules[0].currently_active is True
+    assert rule.to_dict()["schedules"][0]["id"] == 16158
+
+
 def test_client_returns_typed_models(requests_mock):
     """Named client helpers return models while request retains the envelope."""
     requests_mock.get(
@@ -320,6 +341,33 @@ def test_client_returns_typed_models(requests_mock):
     assert devices[0].connected is True
     assert isinstance(rule, UsageAlertRule)
     assert rule.duration == 30
+
+
+def test_response_returns_typed_envelope_and_metadata(requests_mock):
+    """Typed response envelopes preserve mutation metadata and data models."""
+    requests_mock.patch(
+        API_BASE_URL + "/users/12345/devices/device/rules/usage-alerts/rule",
+        json={
+            "success": True,
+            "code": 612,
+            "message": "Record successfully updated",
+            "http_code": 200,
+            "data": [{"id": "rule", "active": False}],
+            "count": 1,
+        },
+    )
+    response = FlumeClient(auth()).response(
+        "PATCH",
+        "/users/12345/devices/device/rules/usage-alerts/rule",
+        model=UsageAlertRule,
+        json={"active": False},
+    )
+
+    assert isinstance(response, FlumeResponse)
+    assert response.code == 612
+    assert response.message == "Record successfully updated"
+    assert isinstance(response.data[0], UsageAlertRule)
+    assert response.data[0].active is False
 
 
 def test_legacy_resource_classes_return_models(requests_mock):

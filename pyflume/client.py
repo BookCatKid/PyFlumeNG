@@ -29,6 +29,7 @@ from .models import (
     UsageAlert,
     UsageAlertRule,
     User,
+    FlumeResponse,
     modelize,
 )
 
@@ -83,7 +84,11 @@ class FlumeClient:
 
     def data(self, method, path, model=None, **kwargs):
         """Return the response data parsed into portal-shaped models."""
-        return modelize(self.request(method, path, **kwargs).get("data", []), model)
+        return self.response(method, path, model=model, **kwargs).data
+
+    def response(self, method, path, model=None, **kwargs):
+        """Return a typed Flume response envelope."""
+        return FlumeResponse(self.request(method, path, **kwargs), model=model)
 
     def data_one(self, method, path, model=None, **kwargs):
         """Return the first parsed resource, matching portal ``model()`` calls."""

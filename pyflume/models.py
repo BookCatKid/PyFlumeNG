@@ -66,6 +66,35 @@ class FlumeModel:
         return "{0}({1!r})".format(type(self).__name__, self.to_dict())
 
 
+class FlumeResponse(FlumeModel):
+    """Flume response envelope with typed data and preserved metadata."""
+
+    defaults = {
+        "success": False,
+        "code": None,
+        "message": None,
+        "http_code": None,
+        "http_message": None,
+        "detailed": None,
+        "data": [],
+        "count": 0,
+        "pagination": None,
+    }
+
+    def __init__(self, value=None, model=None):
+        super().__init__(value)
+        if model is not None:
+            self.data = modelize(self.data, model)
+
+    @property
+    def next_url(self):
+        return (self.pagination or {}).get("next")
+
+    @property
+    def previous_url(self):
+        return (self.pagination or {}).get("prev")
+
+
 class User(FlumeModel):
     """Portal user resource."""
 
@@ -327,3 +356,7 @@ def modelize(value, model):
     if isinstance(value, dict):
         return model(value)
     return value
+
+
+# The portal constructs schedules as concrete models nested on usage rules.
+UsageAlertRule.nested["schedules"] = DoNotAlertSchedule
