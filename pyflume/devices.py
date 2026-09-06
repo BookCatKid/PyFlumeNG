@@ -3,6 +3,7 @@
 from requests import Session
 
 from .constants import API_DEVICES_URL, DEFAULT_TIMEOUT  # noqa: WPS300
+from .models import Device, modelize  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -63,4 +64,4 @@ class FlumeDeviceList:
         # Check for response errors.
         flume_response_error("Impossible to retreive devices", response)
 
-        return response.json()["data"]
+        return modelize(response.json()["data"], Device)

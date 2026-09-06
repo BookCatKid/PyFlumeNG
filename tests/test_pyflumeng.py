@@ -3,7 +3,17 @@
 from urllib.parse import parse_qs
 
 import pytest
-from pyflume import FlumeAuth, FlumeClient, PersonalAuth, FlumePortalAuth
+from pyflume import (
+    Budget,
+    Device,
+    FlumeAuth,
+    FlumeClient,
+    FlumePortalAuth,
+    PersonalAuth,
+    UsageAlertRule,
+)
+from pyflume.devices import FlumeDeviceList
+from pyflume.leak import FlumeLeakList
 from pyflume.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
 from pyflume.constants import API_BASE_URL, URL_OAUTH_TOKEN
 from pyflume.errors import FlumeRateLimitError
@@ -140,7 +150,7 @@ def test_client_refreshes_once_after_401(requests_mock):
     )
     client = FlumeClient(auth())
 
-    assert client.get_user()[0]["id"] == 12345
+    assert client.get_user()["id"] == 12345
     assert requests_mock.call_count == 3
 
 
@@ -192,7 +202,7 @@ def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
     )
     client = FlumeClient(auth())
 
-    assert client.get_location_profiles() == [{"field": "toilet"}]
+    assert client.get_location_profiles()["field"] == "toilet"
     client.update_span_type("device", "span", "IRRIGATION")
     assert requests_mock.request_history[-1].json() == {"type": "IRRIGATION"}
     client.toggle_usage_alert_schedule("device", "rule", 16158, False)
@@ -268,3 +278,62 @@ def test_portal_list_helpers_follow_pagination(requests_mock):
         "option-one",
         "option-two",
     ]
+
+
+def test_models_follow_portal_shapes_and_preserve_unknown_fields():
+    """Models expose portal behavior without dropping future fields."""
+    rule = UsageAlertRule(
+        {
+            "id": 10,
+            "duration": 125,
+            "notify_every": 1500,
+            "shutoff_config": {"active": True},
+            "future_portal_field": {"enabled": True},
+        },
+    )
+    device = Device({"id": "device", "future_device_field": "kept"})
+
+    assert rule.duration_hour_min == {"hour": 2, "min": 5}
+    assert rule.notify_every_day_hour == {"day": 1, "hour": 1}
+    assert rule.shutoff_config.active is True
+    assert rule["future_portal_field"] == {"enabled": True}
+    assert device.to_dict()["future_device_field"] == "kept"
+    assert isinstance(Budget({"id": 1}), Budget)
+
+
+def test_client_returns_typed_models(requests_mock):
+    """Named client helpers return models while request retains the envelope."""
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices",
+        json={"success": True, "data": [{"id": "device", "connected": True}]},
+    )
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices/device/rules/usage-alerts/rule",
+        json={"success": True, "data": [{"id": "rule", "duration": 30}]},
+    )
+    client = FlumeClient(auth())
+
+    devices = client.list_all("/users/12345/devices", {"limit": 50}, Device)
+    rule = client.get_usage_alert_rule("device", "rule")
+
+    assert isinstance(devices[0], Device)
+    assert devices[0].connected is True
+    assert isinstance(rule, UsageAlertRule)
+    assert rule.duration == 30
+
+
+def test_legacy_resource_classes_return_models(requests_mock):
+    """The original class names use the same typed model layer."""
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices",
+        json={"success": True, "data": [{"id": "device"}]},
+    )
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices/device/leaks/active",
+        json={"success": True, "data": [{"id": "leak", "active": True}]},
+    )
+    devices = FlumeDeviceList(auth())
+    leaks = FlumeLeakList(auth(), "device")
+
+    assert isinstance(devices.device_list[0], Device)
+    assert leaks.leak_alert_list[0].active is True

@@ -9,6 +9,7 @@ from .constants import (  # noqa: WPS300
     API_NOTIFICATIONS_URL,
     DEFAULT_TIMEOUT,
 )
+from .models import Notification, modelize  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -131,4 +132,4 @@ class FlumeNotificationList:
             self.has_next = False
             self.next_page = None
             LOGGER.debug("No further pages for Notification results.")
-        return response_json["data"]
+        return modelize(response_json["data"], Notification)

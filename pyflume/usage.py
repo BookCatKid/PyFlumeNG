@@ -10,6 +10,7 @@ from .constants import (  # noqa: WPS300
     DEFAULT_TIMEOUT,
 )
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
+from .models import UsageAlert, UsageAlertRule, modelize  # noqa: WPS300
 
 # Configure logging
 LOGGER = configure_logger(__name__)
@@ -94,7 +95,12 @@ class FlumeUsageAlertList:
             user_id=self._flume_auth.user_id,
             device_id=device_id,
         )
-        return self._get_usage_request(api_url, {}, update_pagination=False)
+        return self._get_usage_request(
+            api_url,
+            {},
+            update_pagination=False,
+            model=UsageAlertRule,
+        )
 
     def get_usage_alert_rule(self, device_id, rule_id):
         """Return a single usage alert rule for a device.
@@ -111,7 +117,12 @@ class FlumeUsageAlertList:
             device_id=device_id,
             rule_id=rule_id,
         )
-        return self._get_usage_request(api_url, {}, update_pagination=False)
+        return self._get_usage_request(
+            api_url,
+            {},
+            update_pagination=False,
+            model=UsageAlertRule,
+        )
 
     def update_usage_alert_rule(self, device_id, rule_id, payload):
         """Update a usage alert rule for a device.
@@ -182,7 +193,13 @@ class FlumeUsageAlertList:
             and response_json["pagination"]["next"] is not None
         )
 
-    def _get_usage_request(self, api_url, query_string, update_pagination=True):
+    def _get_usage_request(
+        self,
+        api_url,
+        query_string,
+        update_pagination=True,
+        model=UsageAlert,
+    ):
         """Make an API request to get usage alerts from the Flume API.
 
         Args:
@@ -190,6 +207,7 @@ class FlumeUsageAlertList:
             query_string (object): query string options
             update_pagination (bool): Whether to update usage-alert list
                 pagination state for this request.
+            model (type): Model used to parse response data.
 
         Returns:
             object: Reponse in JSON format from API.
@@ -210,7 +228,7 @@ class FlumeUsageAlertList:
 
         response_json = response.json()
         if not update_pagination:
-            return response_json["data"]
+            return modelize(response_json["data"], model)
 
         if self._has_next_page(response_json):
             self.next_page = response_json["pagination"]["next"]
@@ -222,4 +240,4 @@ class FlumeUsageAlertList:
             self.has_next = False
             self.next_page = None
             LOGGER.debug("No further pages for Usage results.")
-        return response_json["data"]
+        return modelize(response_json["data"], UsageAlert)

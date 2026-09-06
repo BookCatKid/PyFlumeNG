@@ -3,6 +3,7 @@
 from requests import Session
 
 from .constants import API_LEAK_URL, DEFAULT_TIMEOUT  # noqa: WPS300
+from .models import Leak, modelize  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -75,4 +76,4 @@ class FlumeLeakList:
 
         # Check for response errors.
         flume_response_error("Impossible to retrieve leak alerts", response)
-        return response.json()["data"]
+        return modelize(response.json()["data"], Leak)

@@ -66,6 +66,13 @@ forward-compatibility escape hatch for future Flume routes added after this
 release. It returns the complete Flume response envelope, while named methods
 return the envelope's `data` field.
 
+Named resource methods return open typed models based on the portal's own
+model behavior. For example, `get_user()` returns `pyflume.User`,
+`list_devices()` returns `pyflume.Device` objects, and
+`get_usage_alert_rule()` returns `pyflume.UsageAlertRule`. Models support both
+attribute and mapping access, expose `to_dict()`, and preserve fields added by
+Flume that are not yet known to this release.
+
 For any questions or additional support, refer to the official Flume API
 documentation or contact the development team.
 
