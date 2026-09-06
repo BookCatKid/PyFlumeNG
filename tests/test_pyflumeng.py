@@ -174,3 +174,97 @@ def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
 
     assert result == []
     assert requests_mock.last_request.json() == {"active": False}
+
+
+def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
+    """Named portal wrappers preserve frontend paths, query, and payloads."""
+    requests_mock.get(
+        API_BASE_URL + "/location-profiles",
+        json={"success": True, "data": [{"field": "toilet"}]},
+    )
+    requests_mock.patch(
+        API_BASE_URL + "/users/12345/devices/device/spans/span",
+        json={"success": True, "data": []},
+    )
+    requests_mock.patch(
+        API_BASE_URL + "/users/12345/devices/device/rules/usage-alerts/rule/do-not-alert-schedules",
+        json={"success": True, "data": []},
+    )
+    client = FlumeClient(auth())
+
+    assert client.get_location_profiles() == [{"field": "toilet"}]
+    client.update_span_type("device", "span", "IRRIGATION")
+    assert requests_mock.request_history[-1].json() == {"type": "IRRIGATION"}
+    client.toggle_usage_alert_schedule("device", "rule", 16158, False)
+    assert requests_mock.last_request.path.endswith(
+        "/rules/usage-alerts/rule/do-not-alert-schedules",
+    )
+    assert requests_mock.last_request.json() == {"active": False}
+
+
+def test_portal_accuracy_payload_wrapper(requests_mock):
+    """The accuracy helper constructs the same fields as the portal form."""
+    requests_mock.post(
+        API_BASE_URL + "/users/12345/devices/device/meters/accuracy",
+        json={"success": True, "data": []},
+    )
+    client = FlumeClient(auth())
+
+    client.submit_meter_accuracy_readings(
+        "device",
+        "2026-09-06 10:00:00",
+        "2026-09-06 11:00:00",
+        100,
+        101,
+        "before-image",
+        "after-image",
+        "GALLONS",
+    )
+
+    assert requests_mock.last_request.json() == {
+        "since_datetime": "2026-09-06 10:00:00",
+        "until_datetime": "2026-09-06 11:00:00",
+        "since_reading": 100,
+        "until_reading": 101,
+        "since_image": "before-image",
+        "until_image": "after-image",
+        "units": "GALLONS",
+    }
+
+
+def test_portal_list_helpers_follow_pagination(requests_mock):
+    """Portal list helpers return all records, not only the first page."""
+    base = API_BASE_URL + "/users/12345/devices/device/integrations"
+    options = API_BASE_URL + "/users/12345/devices/device/purchase-options"
+    requests_mock.get(
+        base,
+        json={
+            "data": [{"id": "one"}],
+            "pagination": {"next": "/users/12345/devices/device/integrations?offset=1"},
+        },
+    )
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices/device/integrations?offset=1",
+        json={"data": [{"id": "two"}], "pagination": None},
+    )
+    requests_mock.get(
+        options,
+        json={
+            "data": [{"id": "option-one"}],
+            "pagination": {"next": "/users/12345/devices/device/purchase-options?offset=1"},
+        },
+    )
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices/device/purchase-options?offset=1",
+        json={"data": [{"id": "option-two"}], "pagination": None},
+    )
+    client = FlumeClient(auth())
+
+    assert [item["id"] for item in client.list_shutoff_integrations("device")] == [
+        "one",
+        "two",
+    ]
+    assert [item["id"] for item in client.get_purchase_options("device")] == [
+        "option-one",
+        "option-two",
+    ]

@@ -60,9 +60,11 @@ Authentication module to handle tokens and user credentials within the Flume env
 ## Getting Started
 To get started with the Flume API Integration, refer to the individual documentation files for each module. They provide detailed information on dependencies, initialization, methods, and example usage.
 
-For endpoints without a named helper, use `FlumeClient.raw()`. It returns the
-complete Flume response envelope, while named methods return the envelope's
-`data` field.
+Every endpoint extracted from the current Flume portal is represented by a
+named `FlumeClient` method. `FlumeClient.raw()` remains available only as a
+forward-compatibility escape hatch for future Flume routes added after this
+release. It returns the complete Flume response envelope, while named methods
+return the envelope's `data` field.
 
 For any questions or additional support, refer to the official Flume API
 documentation or contact the development team.
