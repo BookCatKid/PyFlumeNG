@@ -1,54 +1,54 @@
-# FlumeData
-## Overview
-FlumeData is a Python class responsible for retrieving and updating data from the Flume API. It works in tandem with the FlumeAuth class for authentication and provides an interface to interact with various Flume data endpoints.
+# Data retrieval
 
-## Dependencies
- - ratelimit
- - requests
- - Python ≥ 3.9 or the backports.zoneinfo package for earlier versions.
+`FlumeData` is the original polling/query helper. It accepts either auth mode
+and maintains typed `values` for its standard query windows.
 
-## Initialization
-To initialize the FlumeData object, you'll need the following parameters:
+The `PersonalAuth` object in the first example is only one valid choice. If the
+rest of your application uses `PortalAuth`, pass that same object to
+`FlumeData`; you do not need separate Personal API credentials just for data
+queries.
 
- - `flume_auth`: FlumeAuth object for authentication.
- - `device_id`: Flume device id.
- - `device_tz`: Timezone of the device.
- - `scan_interval`: Duration of the scan (e.g., 60 minutes).
- - `update_on_init`: (Optional) Whether to update on initialization. Default is True.
- - `http_session`: (Optional) Requests Session() object.
- - `timeout`: (Optional) Requests timeout for throttling. Default value is specified in DEFAULT_TIMEOUT.
- - `query_payload`: (Optional) Specific query payload to request for the device.
-
-## Methods
-Update Methods
-
-`update()`
-Method to return updated values for the session. Adheres to API call limits.
-
-`update_force()`
-Method to return updated values for the session without auto-retry or limits.
-
-## Internals
-There are also some internal methods that handle the generation of the API query payload and other functionalities. Most users will not need to interact with these directly.
-
-## Example
 ```python
-import pyflume
 from datetime import timedelta
-auth = pyflume.FlumeAuth(
-    username='your_username',
-    password='your_password',
-    client_id='client_id',
-    client_secret='client_secret'
+import pyflume
+
+auth = pyflume.PersonalAuth(
+    username="your_email",
+    password="your_password",
+    client_id="your_client_id",
+    client_secret="your_client_secret",
 )
-auth.retrieve_token()
 
 data = pyflume.FlumeData(
     flume_auth=auth,
-    device_id='your_device_id',
-    device_tz='your_timezone',
-    scan_interval=timedelta(minutes=60)
+    device_id="your_device_id",
+    device_tz="America/Los_Angeles",
+    scan_interval=timedelta(minutes=60),
 )
-data.update()
-print(data.values)  # Prints the current data values
+print(data.values)
 ```
+
+Equivalent setup with portal auth:
+
+```python
+auth = pyflume.PortalAuth(
+    username="your_email",
+    password="your_password",
+)
+
+data = pyflume.FlumeData(
+    flume_auth=auth,
+    device_id="your_device_id",
+    device_tz="America/Los_Angeles",
+    scan_interval=timedelta(minutes=60),
+)
+```
+
+`update()` applies the legacy rate limiter. `update_force()` performs the query
+immediately. `query_payload` is a typed `QueryPayload`, and `values` is a
+`QueryValues` mapping from request IDs to numeric values or `None`.
+
+For arbitrary queries, current flow, and portal root-device query routes, use
+the typed `FlumeClient.query()`, `portal_query()`, `get_current_flow()`, and
+`get_portal_current_flow()` methods documented in the
+[API reference](api-reference.md).

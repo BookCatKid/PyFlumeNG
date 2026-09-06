@@ -1,9 +1,13 @@
-"""Retrieve leak notifications from Flume API."""
+"""Retrieve leak notifications from the Flume API."""
+
+from typing import List, Optional, Union
 
 from requests import Session
 
+from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
 from .constants import API_LEAK_URL, DEFAULT_TIMEOUT  # noqa: WPS300
 from .models import Leak, modelize  # noqa: WPS300
+from .types import ResourceId  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -15,12 +19,12 @@ class FlumeLeakList:
 
     def __init__(  # noqa: WPS211
         self,
-        flume_auth,
-        device_id,
-        http_session=None,
-        timeout=DEFAULT_TIMEOUT,
-        read="false",
-    ):
+        flume_auth: Union[FlumeAuth, FlumePortalAuth],
+        device_id: ResourceId,
+        http_session: Optional[Session] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        read: str = "false",
+    ) -> None:
         """
 
         Initialize the data object.
@@ -33,19 +37,19 @@ class FlumeLeakList:
             read: state of leak notification list, have they been read, not read.
 
         """
-        self._timeout = timeout
-        self._flume_auth = flume_auth
-        self._read = read
-        self.device_id = device_id
+        self._timeout: float = timeout
+        self._flume_auth: Union[FlumeAuth, FlumePortalAuth] = flume_auth
+        self._read: str = read
+        self.device_id: ResourceId = device_id
 
         if http_session is None:
-            self._http_session = Session()
+            self._http_session: Session = Session()
         else:
             self._http_session = http_session
 
         self.leak_alert_list = self.get_leaks()
 
-    def get_leaks(self):
+    def get_leaks(self) -> List[Leak]:
         """Return all leak alerts from devices owned by the user.
 
         Returns:

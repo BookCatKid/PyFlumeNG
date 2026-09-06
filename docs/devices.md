@@ -1,37 +1,40 @@
-# FlumeDeviceList
-## Overview
-FlumeDeviceList is a Python class designed to retrieve the Flume device list from the Flume API. It leverages the authentication handled by FlumeAuth and provides an interface to access the list of devices associated with the user account.
+# Devices
 
-## Dependencies
- - requests
+`FlumeDeviceList` keeps the original PyFlume interface and now returns
+`list[Device]` instead of untyped JSON dictionaries.
 
-## Initialization
-To initialize the FlumeDeviceList object, you'll need the following parameters:
+It accepts both `PersonalAuth` and `PortalAuth`. The PersonalAuth example below
+does not mean the device helper requires that flow.
 
- - `flume_auth`: FlumeAuth object for authentication.
- - `http_session`: (Optional) Requests Session() object.
- - `timeout`: (Optional) Requests timeout for throttling. The default value is specified in DEFAULT_TIMEOUT.
-
-## Methods
-Device Retrieval
-
-`get_devices()`
-Method to return all available devices from the Flume API. This method fetches the JSON device list.
-
-Example
 ```python
 import pyflume
-auth = pyflume.FlumeAuth(
-    username='your_username',
-    password='your_password',
-    client_id='client_id',
-    client_secret='client_secret'
-)
-auth.retrieve_token()
 
-device_list_obj = pyflume.FlumeDeviceList(
-    flume_auth=auth
+auth = pyflume.PersonalAuth(
+    username="your_email",
+    password="your_password",
+    client_id="your_client_id",
+    client_secret="your_client_secret",
 )
-device_list = device_list_obj.get_devices()
-print(device_list)  # Prints the JSON device list
+devices = pyflume.FlumeDeviceList(auth).get_devices()
+print(devices[0].id)
 ```
+
+If you are already authenticated through the customer portal, the equivalent
+code is simply:
+
+```python
+auth = pyflume.PortalAuth(
+    username="your_email",
+    password="your_password",
+)
+devices = pyflume.FlumeDeviceList(auth).get_devices()
+```
+
+For new code, `FlumeClient` exposes typed user-scoped and portal root-device
+routes, current flow, purchase options, meter accuracy, integrations, spans,
+feedback, and query methods. See the [API reference](api-reference.md) for the
+complete method list and return types.
+
+`FlumeClient.list_devices()` uses the user-scoped device route and can be used
+with either auth object. `list_portal_devices()` represents the root route used
+by the customer portal.

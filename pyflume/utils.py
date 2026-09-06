@@ -1,11 +1,14 @@
 """All functions to support Flume App."""
 
-from datetime import datetime, timedelta
 import json
 import logging
+from datetime import datetime, timedelta
+from typing import Union
+
+from requests import Response
 
 
-def configure_logger(name):
+def configure_logger(name: str) -> logging.Logger:
     """Configure and return a custom logger for the given name.
 
     Args:
@@ -29,7 +32,7 @@ def configure_logger(name):
     return logger
 
 
-def format_time(time):
+def format_time(time: datetime) -> str:
     """
     Format time based on strftime.
 
@@ -43,7 +46,7 @@ def format_time(time):
     return time.replace(second=0).strftime("%Y-%m-%d %H:%M:%S")  # noqa: WPS323
 
 
-def format_start_today(time):
+def format_start_today(time: datetime) -> str:
     """
     Format time starting at 00:00:00 provided datetime.
 
@@ -57,7 +60,7 @@ def format_start_today(time):
     return format_time(datetime.combine(time, datetime.min.time()))
 
 
-def format_start_month(time):
+def format_start_month(time: datetime) -> str:
     """
     Format time starting at the first of the month for provided datetime.
 
@@ -76,7 +79,7 @@ def format_start_month(time):
     )
 
 
-def format_start_week(time):
+def format_start_week(time: datetime) -> str:
     """
     Format time starting at the start of week for provided datetime.
 
@@ -104,7 +107,7 @@ class FlumeResponseError(Exception):
     """
 
 
-def flume_response_error(message, response):
+def flume_response_error(message: str, response: Response) -> None:
     """Define a function to handle response errors from the Flume API.
 
     Args:
@@ -120,7 +123,9 @@ def flume_response_error(message, response):
 
     # If the response code is 400 (Bad Request), retrieve the detailed error message
     if response.status_code == 400:  # noqa: WPS432
-        error_message = json.loads(response.text)["detailed"][0]
+        error_message: Union[str, int, float, bool, None] = json.loads(response.text)[
+            "detailed"
+        ][0]
     else:
         # For other error codes, retrieve the general error message
         error_message = json.loads(response.text)["message"]

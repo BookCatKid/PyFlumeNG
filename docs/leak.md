@@ -1,40 +1,32 @@
-# FlumeLeakList
-## Overview
-FlumeLeakList is a Python class designed to retrieve leak notifications from the Flume API. The class can query leak alerts for specific devices and provides control over the state of the notification list (read or not read).
+# Leak alerts
 
-## Dependencies
- - requests
+`FlumeLeakList` is the legacy leak helper. `get_leaks()` returns `list[Leak]`.
+The helper accepts either `PersonalAuth` or `PortalAuth`; PersonalAuth is shown
+first only because it is the original PyFlume authentication flow.
 
-## Initialization
-To initialize the FlumeLeakList object, you'll need the following parameters:
-
- - `flume_auth`: FlumeAuth object for authentication.
- - `device_id`: The Device ID to query.
- - `http_session`: (Optional) Requests Session() object.
- - `timeout`: (Optional) Requests timeout for throttling. The default value is specified in DEFAULT_TIMEOUT.
- - `read`: (Optional) State of leak notification list; specifies if they have been read or not read. Default is "false."
-
-## Methods
-Leak Notification Retrieval
-
-`get_leaks()`
-Method to return all leak alerts from devices owned by the user. This method fetches the JSON list of leak notifications, sorted in ascending order.
-
-## Example
-```python 
+```python
 import pyflume
-auth = pyflume.FlumeAuth(
-    username='your_username',
-    password='your_password',
-    client_id='client_id',
-    client_secret='client_secret'
-)
-auth.retrieve_token()
 
-leak_list_obj = pyflume.FlumeLeakList(
-    flume_auth=auth,
-    device_id='your_device_id'
+auth = pyflume.PersonalAuth(
+    username="your_email",
+    password="your_password",
+    client_id="your_client_id",
+    client_secret="your_client_secret",
 )
-leak_alert_list = leak_list_obj.get_leaks()
-print(leak_alert_list)  # Prints the JSON list of leak notifications
+leaks = pyflume.FlumeLeakList(auth, device_id="your_device_id").get_leaks()
 ```
+
+With portal auth:
+
+```python
+auth = pyflume.PortalAuth(
+    username="your_email",
+    password="your_password",
+)
+leaks = pyflume.FlumeLeakList(auth, device_id="your_device_id").get_leaks()
+```
+
+The returned `Leak` models expose known fields such as `id`, `device_id`,
+`active`, and `created_datetime`, while preserving additional API fields.
+`FlumeClient` also provides typed user-scoped and portal-route leak methods;
+see the [API reference](api-reference.md).

@@ -1,7 +1,10 @@
-"""Retrieve Devices from Flume API."""
+"""Retrieve devices from the Flume API."""
+
+from typing import List, Optional, Union
 
 from requests import Session
 
+from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
 from .constants import API_DEVICES_URL, DEFAULT_TIMEOUT  # noqa: WPS300
 from .models import Device, modelize  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
@@ -15,10 +18,10 @@ class FlumeDeviceList:
 
     def __init__(
         self,
-        flume_auth,
-        http_session=None,
-        timeout=DEFAULT_TIMEOUT,
-    ):
+        flume_auth: Union[FlumeAuth, FlumePortalAuth],
+        http_session: Optional[Session] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> None:
         """
 
         Initialize the data object.
@@ -29,17 +32,17 @@ class FlumeDeviceList:
             timeout: Requests timeout for throttling.
 
         """
-        self._timeout = timeout
-        self._flume_auth = flume_auth
+        self._timeout: float = timeout
+        self._flume_auth: Union[FlumeAuth, FlumePortalAuth] = flume_auth
 
         if http_session is None:
-            self._http_session = Session()
+            self._http_session: Session = Session()
         else:
             self._http_session = http_session
 
         self.device_list = self.get_devices()
 
-    def get_devices(self):
+    def get_devices(self) -> List[Device]:
         """
         Return all available devices from Flume API.
 

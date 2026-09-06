@@ -2,8 +2,12 @@
 
 from .auth import (  # noqa: WPS300, F401
     FlumeAuth,
-    FlumeAuth as PersonalAuth,
     FlumePortalAuth,
+)
+from .auth import (
+    FlumeAuth as PersonalAuth,
+)
+from .auth import (
     FlumePortalAuth as PortalAuth,
 )
 from .client import FlumeClient  # noqa: WPS300, F401

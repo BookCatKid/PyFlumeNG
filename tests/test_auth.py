@@ -4,9 +4,10 @@
 import unittest
 from urllib.parse import parse_qs
 
+import requests_mock
+
 # Third-party imports
 from requests import Session
-import requests_mock
 
 # Local application/library-specific imports
 import pyflume

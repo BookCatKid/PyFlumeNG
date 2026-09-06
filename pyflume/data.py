@@ -1,10 +1,13 @@
 """Retrieve data from Flume API."""
 
+import sys
 from datetime import datetime, timedelta, timezone
+from typing import Any, List, Optional, Union, cast
 
 from ratelimit import limits, sleep_and_retry
 from requests import Session
 
+from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
 from .constants import (  # noqa: WPS300
     API_LIMIT,
     API_QUERY_URL,
@@ -12,6 +15,7 @@ from .constants import (  # noqa: WPS300
     CONST_UNIT_OF_MEASUREMENT,
     DEFAULT_TIMEOUT,
 )
+from .types import QueryPayload, QuerySpec, QueryValues, ResourceId  # noqa: WPS300
 from .utils import (  # noqa: WPS300
     configure_logger,
     flume_response_error,
@@ -21,9 +25,9 @@ from .utils import (  # noqa: WPS300
     format_time,
 )
 
-try:
+if sys.version_info >= (3, 9):
     from zoneinfo import ZoneInfo  # noqa: WPS433
-except ImportError:  # Python < 3.9
+else:  # pragma: no cover - exercised on Python 3.8
     from backports.zoneinfo import ZoneInfo  # noqa: WPS433,WPS440
 
 # Configure logging
@@ -35,15 +39,15 @@ class FlumeData:
 
     def __init__(  # noqa: WPS211
         self,
-        flume_auth,
-        device_id,
-        device_tz,
-        scan_interval,
-        update_on_init=True,
-        http_session=None,
-        timeout=DEFAULT_TIMEOUT,
-        query_payload=None,
-    ):
+        flume_auth: Union[FlumeAuth, FlumePortalAuth],
+        device_id: ResourceId,
+        device_tz: str,
+        scan_interval: timedelta,
+        update_on_init: bool = True,
+        http_session: Optional[Session] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        query_payload: Optional[QueryPayload] = None,
+    ) -> None:
         """
 
         Initialize the data object.
@@ -59,12 +63,12 @@ class FlumeData:
             query_payload: Specific query_payload to request for device.
 
         """
-        self._timeout = timeout
-        self._flume_auth = flume_auth
-        self._scan_interval = scan_interval
-        self.device_id = device_id
-        self.device_tz = device_tz
-        self.values = {}  # noqa: WPS110
+        self._timeout: float = timeout
+        self._flume_auth: Union[FlumeAuth, FlumePortalAuth] = flume_auth
+        self._scan_interval: timedelta = scan_interval
+        self.device_id: ResourceId = device_id
+        self.device_tz: str = device_tz
+        self.values: QueryValues = {}  # noqa: WPS110
         if query_payload is None:
             self.query_payload = self._generate_api_query_payload(
                 self._scan_interval,
@@ -73,10 +77,10 @@ class FlumeData:
         else:
             self.query_payload = query_payload
         if http_session is None:
-            self._http_session = Session()
+            self._http_session: Session = Session()
         else:
             self._http_session = http_session
-        self._query_keys = [
+        self._query_keys: List[str] = [
             query["request_id"] for query in self.query_payload["queries"]
         ]
         if update_on_init:
@@ -84,7 +88,7 @@ class FlumeData:
 
     @sleep_and_retry
     @limits(calls=2, period=API_LIMIT)
-    def update(self):
+    def update(self) -> None:
         """
         Return updated value for session.
 
@@ -94,7 +98,7 @@ class FlumeData:
         """
         return self.update_force()
 
-    def update_force(self):
+    def update_force(self) -> None:
         """Return updated value for session without auto retry or limits."""
         self.query_payload = self._generate_api_query_payload(
             self._scan_interval,
@@ -107,7 +111,7 @@ class FlumeData:
         )
         response = self._http_session.post(
             url,
-            json=self.query_payload,
+            json=cast(Any, self.query_payload),
             headers=self._flume_auth.authorization_header,
             timeout=self._timeout,
         )
@@ -125,7 +129,7 @@ class FlumeData:
         responses = response.json()["data"][0]
 
         # Step 1: Initialize an empty dictionary
-        values_dict = {}
+        values_dict: QueryValues = {}
 
         # Step 2: Loop through each key in self._query_keys
         for key in self._query_keys:
@@ -140,7 +144,11 @@ class FlumeData:
         # Step 6: Assign the result to self.values
         self.values = values_dict  # noqa: WPS110
 
-    def _generate_api_query_payload(self, scan_interval, device_tz):
+    def _generate_api_query_payload(
+        self,
+        scan_interval: timedelta,
+        device_tz: str,
+    ) -> QueryPayload:
         """Generate API Query payload to support getting data from Flume API.
 
         Args:
@@ -152,7 +160,7 @@ class FlumeData:
         """
         datetime_localtime = datetime.now(timezone.utc).astimezone(ZoneInfo(device_tz))
 
-        queries = [
+        queries: List[QuerySpec] = [
             {
                 "request_id": "current_interval",
                 "bucket": "MIN",

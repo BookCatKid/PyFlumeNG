@@ -1,0 +1,9 @@
+target-version = "py38"
+line-length = 88
+
+[lint]
+select = ["B", "DTZ", "E", "F", "I"]
+ignore = [
+    "B905",  # zip(strict=...) requires Python 3.10+
+    "E501",  # formatting, not lint, owns line wrapping in this project
+]

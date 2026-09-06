@@ -1,11 +1,13 @@
 """Authenticates to Flume API."""
 
-from datetime import datetime, timedelta
 import json
+from datetime import datetime, timedelta, timezone
+from typing import Any, ClassVar, Dict, FrozenSet, Mapping, Optional, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
 import jwt  # install pyjwt
+from jwt.types import Options
 from requests import Session
 
 from .constants import (  # noqa: WPS300
@@ -18,6 +20,7 @@ from .constants import (  # noqa: WPS300
     URL_OAUTH_TOKEN,
 )
 from .rate_limit import RateLimitState  # noqa: WPS300
+from .types import FlumeToken, JSONDict, ResourceId  # noqa: WPS300
 from .utils import (  # noqa: WPS300
     FlumeResponseError,
     configure_logger,
@@ -28,21 +31,31 @@ from .utils import (  # noqa: WPS300
 LOGGER = configure_logger(__name__)
 
 
+def _validated_token(token: Mapping[str, Any]) -> FlumeToken:
+    """Validate required OAuth token fields while preserving extra fields."""
+    access_token = token.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        raise FlumeResponseError(
+            "Flume token response did not include an access token."
+        )
+    return cast(FlumeToken, cast(object, dict(token)))
+
+
 class FlumeAuth:  # noqa: WPS214
     """Interact with API Authentication."""
 
-    capabilities = frozenset({"personal_api"})
+    capabilities: ClassVar[FrozenSet[str]] = frozenset({"personal_api"})
 
     def __init__(  # noqa: WPS211
         self,
-        username,
-        password,
-        client_id,
-        client_secret,
-        flume_token=None,
-        http_session=None,
-        timeout=DEFAULT_TIMEOUT,
-    ):
+        username: str,
+        password: str,
+        client_id: str,
+        client_secret: str,
+        flume_token: Optional[Mapping[str, Any]] = None,
+        http_session: Optional[Session] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> None:
         """
 
         Initialize the data object.
@@ -58,7 +71,7 @@ class FlumeAuth:  # noqa: WPS214
 
         """
 
-        self._creds = {
+        self._creds: Dict[str, str] = {
             "client_id": client_id,
             "client_secret": client_secret,
             "username": username,
@@ -70,18 +83,18 @@ class FlumeAuth:  # noqa: WPS214
         else:
             self._http_session = http_session
 
-        self._timeout = timeout
-        self._token = None
-        self._decoded_token = None
-        self.user_id = None
-        self.authorization_header = None
-        self.rate_limit = RateLimitState(120)
+        self._timeout: float = timeout
+        self._token: Optional[FlumeToken] = None
+        self._decoded_token: Optional[Dict[str, Any]] = None
+        self.user_id: Optional[ResourceId] = None
+        self.authorization_header: Optional[Dict[str, str]] = None
+        self.rate_limit: RateLimitState = RateLimitState(120)
 
         self._load_token(flume_token)
         self._verify_token()
 
     @property
-    def token(self):
+    def token(self) -> Optional[FlumeToken]:
         """
             Return authorization token for session.
 
@@ -91,9 +104,11 @@ class FlumeAuth:  # noqa: WPS214
         """
         return self._token
 
-    def refresh_token(self):
+    def refresh_token(self) -> None:
         """Refresh authorization token for session."""
-
+        if self._token is None or "refresh_token" not in self._token:
+            self.retrieve_token()
+            return
         payload = {
             "grant_type": "refresh_token",
             "refresh_token": self._token["refresh_token"],
@@ -103,21 +118,21 @@ class FlumeAuth:  # noqa: WPS214
 
         self._load_token(self._request_token(payload))
 
-    def refresh(self):
+    def refresh(self) -> None:
         """Refresh through the common PyFlumeNG auth interface."""
         self.refresh_token()
 
-    def ensure_valid(self):
+    def ensure_valid(self) -> None:
         """Refresh when the token expires within twelve hours."""
         self._verify_token()
 
-    def retrieve_token(self):
+    def retrieve_token(self) -> None:
         """Return authorization token for session."""
 
         payload = dict({"grant_type": "password"}, **self._creds)
         self._load_token(self._request_token(payload))
 
-    def _load_token(self, token):
+    def _load_token(self, token: Optional[Mapping[str, Any]]) -> None:
         """
         Update _token, decode token, user_id and auth header.
 
@@ -125,8 +140,12 @@ class FlumeAuth:  # noqa: WPS214
             token: Authentication bearer token to be decoded.
 
         """
-        jwt_options = {"verify_signature": False}
-        self._token = token
+        if token is None:
+            self.retrieve_token()
+            return
+
+        jwt_options: Options = {"verify_signature": False}
+        self._token = _validated_token(token)
         try:
             self._decoded_token = jwt.decode(
                 self._token["access_token"],
@@ -139,13 +158,15 @@ class FlumeAuth:  # noqa: WPS214
             LOGGER.debug("Token TypeError, fetching token using _creds")
             self.retrieve_token()
 
+        if self._decoded_token is None:
+            raise FlumeResponseError("Flume token could not be decoded.")
         self.user_id = self._decoded_token["user_id"]
 
         self.authorization_header = {
             "authorization": "Bearer {0}".format(self._token.get("access_token")),
         }
 
-    def _request_token(self, payload):
+    def _request_token(self, payload: Mapping[str, str]) -> FlumeToken:
         """
 
         Request Authorization Payload.
@@ -176,12 +197,21 @@ class FlumeAuth:  # noqa: WPS214
             response,
         )
 
-        return json.loads(response.text)["data"][0]
+        token_data = json.loads(response.text)["data"][0]
+        if not isinstance(token_data, Mapping):
+            raise FlumeResponseError("Flume token response was not an object.")
+        return _validated_token(token_data)
 
-    def _verify_token(self):
+    def _verify_token(self) -> None:
         """Check to see if token is expiring in 12 hours."""
-        token_expiration = datetime.fromtimestamp(self._decoded_token["exp"])
-        time_difference = datetime.now() + timedelta(hours=12)  # noqa: WPS432
+        if self._decoded_token is None:
+            self.retrieve_token()
+        if self._decoded_token is None:
+            raise FlumeResponseError("Flume token could not be decoded.")
+        token_expiration = datetime.fromtimestamp(
+            self._decoded_token["exp"], tz=timezone.utc
+        )
+        time_difference = datetime.now(timezone.utc) + timedelta(hours=12)  # noqa: WPS432
         LOGGER.debug("Token expiration time: %s", token_expiration)  # noqa: WPS323
         LOGGER.debug("Token comparison time: %s", time_difference)  # noqa: WPS323
 
@@ -197,26 +227,28 @@ class FlumePortalAuth:  # noqa: WPS214
     client and its broader ``update`` scope.
     """
 
-    capabilities = frozenset({"personal_api", "portal_api", "portal_writes"})
+    capabilities: ClassVar[FrozenSet[str]] = frozenset(
+        {"personal_api", "portal_api", "portal_writes"}
+    )
 
     def __init__(
         self,
-        username,
-        password,
-        flume_token=None,
-        http_session=None,
-        timeout=DEFAULT_TIMEOUT,
-    ):
+        username: str,
+        password: str,
+        flume_token: Optional[Mapping[str, Any]] = None,
+        http_session: Optional[Session] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> None:
         """Initialize portal authentication."""
-        self._username = username
-        self._password = password
-        self._timeout = timeout
-        self._http_session = http_session or Session()
-        self._token = None
-        self._decoded_token = None
-        self.user_id = None
-        self.authorization_header = None
-        self.rate_limit = RateLimitState(72000)
+        self._username: str = username
+        self._password: str = password
+        self._timeout: float = timeout
+        self._http_session: Session = http_session or Session()
+        self._token: Optional[FlumeToken] = None
+        self._decoded_token: Optional[Dict[str, Any]] = None
+        self.user_id: Optional[ResourceId] = None
+        self.authorization_header: Optional[Dict[str, str]] = None
+        self.rate_limit: RateLimitState = RateLimitState(72000)
 
         if flume_token is None:
             self.retrieve_token()
@@ -225,11 +257,11 @@ class FlumePortalAuth:  # noqa: WPS214
         self._verify_token()
 
     @property
-    def token(self):
+    def token(self) -> Optional[FlumeToken]:
         """Return the current portal token response."""
         return self._token
 
-    def retrieve_token(self):
+    def retrieve_token(self) -> None:
         """Authenticate through the portal and exchange the authorization code."""
         state = uuid4().hex
         response = self._http_session.get(
@@ -290,8 +322,11 @@ class FlumePortalAuth:  # noqa: WPS214
             )
         )
 
-    def refresh_token(self):
+    def refresh_token(self) -> None:
         """Refresh the portal token using its form-encoded refresh flow."""
+        if self._token is None or "refresh_token" not in self._token:
+            self.retrieve_token()
+            return
         response = self._http_session.post(
             PORTAL_OAUTH_TOKEN_URL,
             data=(
@@ -306,27 +341,28 @@ class FlumePortalAuth:  # noqa: WPS214
         flume_response_error("Can't refresh portal token", response)
         self._load_token(response.json()["data"][0])
 
-    def refresh(self):
+    def refresh(self) -> None:
         """Refresh through the common PyFlumeNG auth interface."""
         self.refresh_token()
 
-    def ensure_valid(self):
+    def ensure_valid(self) -> None:
         """Refresh when the token expires within twelve hours."""
         self._verify_token()
 
-    def _load_token(self, token):
+    def _load_token(self, token: Mapping[str, Any]) -> None:
         """Update token, user ID, decoded claims, and authorization header."""
-        self._token = token
-        self._decoded_token = jwt.decode(
-            token["access_token"],
+        self._token = _validated_token(token)
+        decoded_token = jwt.decode(
+            self._token["access_token"],
             options={"verify_signature": False},
         )
-        self.user_id = self._decoded_token["user_id"]
+        self._decoded_token = decoded_token
+        self.user_id = decoded_token["user_id"]
         self.authorization_header = {
-            "authorization": "Bearer {0}".format(token["access_token"]),
+            "authorization": "Bearer {0}".format(self._token["access_token"]),
         }
 
-    def _request_portal_token(self, payload):
+    def _request_portal_token(self, payload: JSONDict) -> FlumeToken:
         """Exchange a portal authorization code for an access token."""
         response = self._http_session.post(
             PORTAL_OAUTH_TOKEN_URL,
@@ -335,11 +371,20 @@ class FlumePortalAuth:  # noqa: WPS214
             timeout=self._timeout,
         )
         flume_response_error("Can't get portal token", response)
-        return response.json()["data"][0]
+        token_data = response.json()["data"][0]
+        if not isinstance(token_data, Mapping):
+            raise FlumeResponseError("Flume portal token response was not an object.")
+        return _validated_token(token_data)
 
-    def _verify_token(self):
+    def _verify_token(self) -> None:
         """Refresh when the token expires within twelve hours."""
-        token_expiration = datetime.fromtimestamp(self._decoded_token["exp"])
-        time_difference = datetime.now() + timedelta(hours=12)  # noqa: WPS432
+        if self._decoded_token is None:
+            self.retrieve_token()
+        if self._decoded_token is None:
+            raise FlumeResponseError("Flume portal token could not be decoded.")
+        token_expiration = datetime.fromtimestamp(
+            self._decoded_token["exp"], tz=timezone.utc
+        )
+        time_difference = datetime.now(timezone.utc) + timedelta(hours=12)  # noqa: WPS432
         if token_expiration <= time_difference:
             self.refresh_token()

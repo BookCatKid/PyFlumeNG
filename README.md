@@ -1,17 +1,49 @@
 # PyFlumeNG
-## Overview
-PyFlumeNG is a fork and superset of PyFlume. It preserves the original
-`pyflume` import package and APIs while adding the customer-portal OAuth flow,
-portal-only write operations, complete response/error handling, pagination, and
-additional Flume endpoints discovered in the portal application.
 
-Install the fork with:
+PyFlumeNG is a fork and superset of PyFlume. It keeps the existing `pyflume`
+import package and legacy helpers while adding the customer-portal OAuth flow,
+portal write operations, typed resource models, pagination, response/error
+handling, rate-limit state, and the endpoint surface used by Flume's customer
+portal.
+
+PyFlumeNG is not on PyPI yet. Install it directly from GitHub:
 
 ```bash
-pip install PyFlumeNG
+pip install git+https://github.com/BookCatKid/PyFlumeNG.git
 ```
 
-The Python import remains `pyflume` for compatibility:
+## Authentication
+
+PyFlumeNG supports two ways to obtain a Flume bearer token. They are not tied
+to separate sets of read helpers: ordinary reads such as devices,
+notifications, leaks, usage alerts, and queries can be used with either auth
+object. The main difference is how the token is obtained and what scopes Flume
+grants it.
+
+| Auth class | Credentials | Best fit | Portal-only writes |
+| --- | --- | --- | --- |
+| `PersonalAuth` / `FlumeAuth` | Email, password, API client ID, API client secret | Flume's documented Personal API flow | No |
+| `PortalAuth` / `FlumePortalAuth` | Email and password | Customer-portal flow and code that needs the portal's broader token | Yes |
+
+`PersonalAuth` and `FlumeAuth` are the same class. Use them when you want the
+documented Personal API password-grant flow with credentials generated from
+Flume's API Access settings:
+
+```python
+import pyflume
+
+auth = pyflume.PersonalAuth(
+    username="your_email",
+    password="your_password",
+    client_id="your_client_id",
+    client_secret="your_client_secret",
+)
+client = pyflume.FlumeClient(auth)
+```
+
+`PortalAuth` and `FlumePortalAuth` are the same class. This flow uses the same
+customer-portal OAuth path as Flume's web app and needs only the account
+credentials:
 
 ```python
 import pyflume
@@ -20,61 +52,69 @@ auth = pyflume.PortalAuth(
     username="your_email",
     password="your_password",
 )
-flume = pyflume.FlumeClient(auth)
+client = pyflume.FlumeClient(auth)
 ```
 
-## Retrieve API Key
-`FlumeAuth` remains the original documented Personal API password-grant
-authentication for drop-in compatibility. `PersonalAuth` is its explicit alias
-and still requires a client ID and client secret from the API Access settings
-page. `PortalAuth` uses the customer portal OAuth flow and supports portal-only
-operations such as updating usage-alert rules.
+You can use that `PortalAuth` object for normal reads too. For example,
+`client.list_notifications()`, `FlumeNotificationList(auth)`,
+`client.list_devices()`, and `FlumeData(...)` all accept it. Portal auth becomes
+required when an operation needs a scope that Flume does not grant to a normal
+Personal API token, including the portal usage-alert rule write routes.
 
-## Modules
-Below are the details of each module, each documented in its corresponding file:
+See [Authentication](docs/auth.md) for the full distinction, including which
+auth mode to choose and how the legacy helpers behave.
 
-### Notifications
-Retrieve notifications from the Flume API, including filtering based on the read status.
-- [Read the Notifications documentation](https://github.com/ChrisMandich/PyFlume/blob/master/docs/notifications.md)
+## Typed API
 
-### Usage Alerts
-Manage and retrieve usage alert notifications from the Flume API.
-- [Read the Usage Alerts documentation](https://github.com/ChrisMandich/PyFlume/blob/master/docs/usage.md)
+Named resource methods return typed models. For example:
 
-### Devices
-Retrieve information related to Flume devices, including their list from the API.
-- [Read the Devices documentation](https://github.com/ChrisMandich/PyFlume/blob/master/docs/devices.md)
+```python
+user = client.get_user()  # Optional[User]
+devices = client.list_devices()  # list[Device]
+rules = client.list_usage_alert_rules("device")  # list[UsageAlertRule]
+accuracy = client.get_meter_accuracy("device")  # list[AccuracyResult]
+```
 
-### Leak Alerts
-Manage and retrieve leak notifications from the Flume API.
-- [Read the Leak Alerts documentation](https://github.com/ChrisMandich/PyFlume/blob/master/docs/leak.md)
+Models expose known API fields to type checkers and IDEs while remaining
+forward-compatible with Flume additions. Unknown response fields remain
+available as attributes or mapping keys and are preserved by `to_dict()`.
 
-### Data Retrieval
-Retrieve and update data from the Flume API, working with authentication and various data endpoints.
-- [Read the Data Retrieval documentation](https://github.com/ChrisMandich/PyFlume/blob/master/docs/data.md)
+`pyflume` ships a `py.typed` marker so installed type checkers can consume the
+package annotations. The complete method signatures and model fields are in the
+[generated API reference](docs/api-reference.md).
 
-### Authentication
-Authentication module to handle tokens and user credentials within the Flume environment.
-- [Read the Authentication documentation](https://github.com/ChrisMandich/PyFlume/blob/master/docs/auth.md)
+## Endpoint coverage
 
-## Getting Started
-To get started with the Flume API Integration, refer to the individual documentation files for each module. They provide detailed information on dependencies, initialization, methods, and example usage.
+`FlumeClient` includes the documented Personal API plus portal-discovered
+routes for users, devices, current flow and queries, locations and location
+profiles, notifications, usage alerts and rules, do-not-alert schedules,
+budgets, subscriptions, emergency contacts, shared location access,
+integrations and shutoff valves, spans and span types, feedback, meter
+accuracy, support conversations, purchase options, insurers, professional
+services, API clients, contacts, and subscription/Stripe portal operations.
 
-Every endpoint extracted from the current Flume portal is represented by a
-named `FlumeClient` method. `FlumeClient.raw()` remains available only as a
-forward-compatibility escape hatch for future Flume routes added after this
-release. It returns the complete Flume response envelope, while named methods
-return the envelope's `data` field.
+List helpers follow Flume pagination and return all pages. `response()` exposes
+the complete typed response envelope when pagination or metadata matters, and
+`raw()` remains an escape hatch for routes added by Flume after this release.
+See the [FlumeClient guide](docs/client.md) for the main interface.
 
-Named resource methods return open typed models based on the portal's own
-model behavior. For example, `get_user()` returns `pyflume.User`,
-`list_devices()` returns `pyflume.Device` objects, and
-`get_usage_alert_rule()` returns `pyflume.UsageAlertRule`. Models support both
-attribute and mapping access, expose `to_dict()`, and preserve fields added by
-Flume that are not yet known to this release.
+## Legacy helpers
 
-For any questions or additional support, refer to the official Flume API
-documentation or contact the development team.
+The original helper classes remain available and typed:
 
-## Contributing
-Feel free to contribute to the codebase by opening issues, submitting pull requests, or suggesting improvements.
+- [Data retrieval](docs/data.md)
+- [Devices](docs/devices.md)
+- [Leak alerts](docs/leak.md)
+- [Notifications](docs/notifications.md)
+- [Usage alerts](docs/usage.md)
+
+## Development
+
+The API reference is generated from source signatures and model annotations:
+
+```bash
+python scripts/generate_api_reference.py
+python scripts/generate_api_reference.py --check
+```
+
+`tox` runs the tests, mypy, generated-reference check, and bytecode compilation.

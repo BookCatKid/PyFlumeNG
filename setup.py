@@ -2,19 +2,22 @@
 
 import setuptools
 
-with open("README.md", "r") as fh:
+with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
     name="PyFlumeNG",
-    version="1.0.0",
+    version="0.9.0",
     author="ChrisMandich",
     author_email="Chris@Mandich.net",
     description="Complete Flume API client with Personal API and portal capabilities",
     long_description_content_type="text/markdown",
     long_description=long_description,
-    url="https://github.com/ChrisMandich/PyFlume",
+    url="https://github.com/BookCatKid/PyFlumeNG",
     packages=setuptools.find_packages(exclude=["tests", "tests.*"]),
+    package_data={"pyflume": ["py.typed"]},
+    include_package_data=True,
+    python_requires=">=3.8",
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",

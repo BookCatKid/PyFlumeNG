@@ -3,9 +3,10 @@
 # Standard library imports
 import unittest
 
+import requests_mock
+
 # Third-party imports
 from requests import Session
-import requests_mock
 
 # Local application/library-specific imports
 import pyflume

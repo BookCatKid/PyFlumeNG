@@ -6,50 +6,80 @@ field is retained in the model and included by :meth:`to_dict`.
 """
 
 from copy import deepcopy
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Generic,
+    ItemsView,
+    KeysView,
+    List,
+    Mapping,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
+
+from .types import JSONDict, JSONValue, ResourceId
+
+ModelT = TypeVar("ModelT", bound="FlumeModel")
+ResponseT = TypeVar("ResponseT")
+ModelFactory = Callable[[Mapping[str, Any]], "FlumeModel"]
 
 
 class FlumeModel:
     """Open resource model compatible with both attributes and mappings."""
 
-    defaults = {}
-    nested = {}
+    defaults: ClassVar[Dict[str, Any]] = {}
+    nested: ClassVar[Dict[str, ModelFactory]] = {}
 
-    def __init__(self, value=None, **fields):
+    def __init__(
+        self,
+        value: Optional[Mapping[str, Any]] = None,
+        **fields: Any,
+    ) -> None:
         source = dict(value or {})
         source.update(fields)
         for key, default in self.defaults.items():
             setattr(self, key, deepcopy(default))
-        for key, value in source.items():
+        for key, item in source.items():
             model = self.nested.get(key)
-            if model is not None and value is not None:
-                if isinstance(value, list):
-                    value = [model(item) for item in value]
-                elif isinstance(value, dict):
-                    value = model(value)
-            setattr(self, key, value)
+            if model is not None and item is not None:
+                if isinstance(item, list):
+                    item = [
+                        model(value) if isinstance(value, Mapping) else value
+                        for value in item
+                    ]
+                elif isinstance(item, Mapping):
+                    item = model(item)
+            setattr(self, key, item)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any) -> None:
         setattr(self, key, value)
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, FlumeModel):
             return self.to_dict() == other.to_dict()
         return NotImplemented
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         return self.to_dict().keys()
 
-    def items(self):
+    def items(self) -> ItemsView[str, JSONValue]:
         return self.to_dict().items()
 
-    def to_dict(self):
-        result = {}
+    def to_dict(self) -> JSONDict:
+        result: Dict[str, Any] = {}
         for key, value in self.__dict__.items():
             if key.startswith("_"):
                 continue
@@ -61,20 +91,30 @@ class FlumeModel:
                     for item in value
                 ]
             result[key] = deepcopy(value)
-        return result
+        return cast(JSONDict, result)
 
-    def update(self, values):
+    def update(self: ModelT, values: Mapping[str, Any]) -> ModelT:
         """Update model fields from a mapping and return the model."""
         for key, value in values.items():
             setattr(self, key, value)
         return self
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "{0}({1!r})".format(type(self).__name__, self.to_dict())
 
 
-class FlumeResponse(FlumeModel):
+class FlumeResponse(FlumeModel, Generic[ResponseT]):
     """Flume response envelope with typed data and preserved metadata."""
+
+    success: bool
+    code: Optional[int]
+    message: Optional[str]
+    http_code: Optional[int]
+    http_message: Optional[str]
+    detailed: JSONValue
+    data: Union[ResponseT, List[ResponseT], JSONValue]
+    count: int
+    pagination: Optional[JSONDict]
 
     defaults = {
         "success": False,
@@ -88,52 +128,82 @@ class FlumeResponse(FlumeModel):
         "pagination": None,
     }
 
-    def __init__(self, value=None, model=None):
+    def __init__(
+        self,
+        value: Optional[Mapping[str, Any]] = None,
+        model: Optional[Type[FlumeModel]] = None,
+    ) -> None:
         super().__init__(value)
-        if model is not None:
-            self.data = modelize(self.data, model)
+        if model is not None and isinstance(self.data, list):
+            self.data = cast(
+                Any,
+                modelize(cast(List[Mapping[str, Any]], self.data), model),
+            )
+        elif model is not None and isinstance(self.data, Mapping):
+            self.data = cast(Any, modelize(self.data, model))
 
     @property
-    def next_url(self):
-        return (self.pagination or {}).get("next")
+    def next_url(self) -> Optional[str]:
+        pagination = self.pagination or {}
+        value = pagination.get("next")
+        return value if isinstance(value, str) else None
 
     @property
-    def previous_url(self):
-        return (self.pagination or {}).get("prev")
+    def previous_url(self) -> Optional[str]:
+        pagination = self.pagination or {}
+        value = pagination.get("prev")
+        return value if isinstance(value, str) else None
 
 
 class User(FlumeModel):
     """Portal user resource."""
 
-    defaults = {"id": None, "email_address": "", "first_name": "", "last_name": ""}
+    id: Optional[ResourceId]
+    email_address: str
+    first_name: str
+    last_name: str
+    type: Optional[str]
+    phone: Optional[str]
+    status: Optional[str]
+    signup_datetime: Optional[str]
+
+    defaults = {
+        "id": None,
+        "email_address": "",
+        "first_name": "",
+        "last_name": "",
+        "type": None,
+        "phone": None,
+        "status": None,
+        "signup_datetime": None,
+    }
 
     @property
-    def name(self):
+    def name(self) -> str:
         return " ".join(
             part for part in (self.first_name, self.last_name) if part
         ).strip()
 
 
-class Device(FlumeModel):
-    """Flume bridge or water-sensor device."""
-
-    defaults = {
-        "id": None,
-        "type": None,
-        "location_id": None,
-        "user_id": None,
-        "bridge_id": None,
-        "oriented": False,
-        "last_seen": "",
-        "connected": False,
-        "battery_level": None,
-        "product": None,
-    }
-    nested = {"user": User, "location": lambda value: Location(value)}
-
-
 class Location(FlumeModel):
     """Flume location/home resource."""
+
+    id: Optional[ResourceId]
+    user_id: Optional[ResourceId]
+    name: str
+    primary_location: bool
+    address: Optional[str]
+    address_2: Optional[str]
+    city: Optional[str]
+    state: Optional[str]
+    postal_code: Optional[str]
+    country: Optional[str]
+    tz: Optional[str]
+    installation: JSONValue
+    insurer_id: Optional[ResourceId]
+    building_type: Optional[str]
+    away_mode: bool
+    usage_profile: JSONValue
 
     defaults = {
         "id": None,
@@ -151,11 +221,64 @@ class Location(FlumeModel):
         "insurer_id": None,
         "building_type": None,
         "away_mode": False,
+        "usage_profile": None,
     }
+
+
+class Device(FlumeModel):
+    """Flume bridge or water-sensor device."""
+
+    id: Optional[ResourceId]
+    type: Optional[int]
+    location_id: Optional[ResourceId]
+    user_id: Optional[ResourceId]
+    bridge_id: Optional[ResourceId]
+    name: Optional[str]
+    description: Optional[str]
+    registered: Optional[bool]
+    added_datetime: Optional[str]
+    oriented: bool
+    last_seen: str
+    connected: bool
+    battery_level: Optional[float]
+    product: JSONValue
+    user: Optional[User]
+    location: Optional[Location]
+
+    defaults = {
+        "id": None,
+        "type": None,
+        "location_id": None,
+        "user_id": None,
+        "bridge_id": None,
+        "name": None,
+        "description": None,
+        "registered": None,
+        "added_datetime": None,
+        "oriented": False,
+        "last_seen": "",
+        "connected": False,
+        "battery_level": None,
+        "product": None,
+        "user": None,
+        "location": None,
+    }
+    nested = {"user": User, "location": Location}
 
 
 class Notification(FlumeModel):
     """Portal notification resource."""
+
+    id: Optional[ResourceId]
+    device_id: Optional[ResourceId]
+    user_id: Optional[ResourceId]
+    type: Optional[str]
+    message: str
+    created_datetime: Optional[str]
+    title: str
+    read: bool
+    extra: JSONValue
+    event_rule: JSONValue
 
     defaults = {
         "id": None,
@@ -174,6 +297,13 @@ class Notification(FlumeModel):
 class UsageAlert(FlumeModel):
     """Triggered usage-alert event."""
 
+    id: Optional[ResourceId]
+    device_id: Optional[ResourceId]
+    triggered_datetime: Optional[str]
+    flume_leak: bool
+    query: JSONValue
+    event_rule_name: Optional[str]
+
     defaults = {
         "id": None,
         "device_id": None,
@@ -185,17 +315,23 @@ class UsageAlert(FlumeModel):
 
 
 class QueryResult(FlumeModel):
-    """A query result keyed by request ID with portal fields preserved."""
+    """Query result whose keys are the caller-supplied request IDs."""
 
 
 class CurrentFlow(FlumeModel):
     """Current flow-rate reading."""
 
-    defaults = {"active": False, "gpm": 0, "datetime": None}
+    active: bool
+    gpm: float
+    datetime: Optional[str]
+
+    defaults = {"active": False, "gpm": 0.0, "datetime": None}
 
 
 class ShutoffConfig(FlumeModel):
     """Usage-alert shutoff configuration."""
+
+    active: bool
 
     defaults = {"active": False}
 
@@ -203,12 +339,26 @@ class ShutoffConfig(FlumeModel):
 class UsageAlertRule(FlumeModel):
     """Portal usage-alert rule, including portal-derived display helpers."""
 
+    id: Optional[ResourceId]
+    device_id: Optional[ResourceId]
+    name: str
+    active: bool
+    flow_rate: float
+    duration: int
+    notify_every: int
+    advanced_low_flow: bool
+    shutoff_config: Optional[ShutoffConfig]
+    schedules: List["DoNotAlertSchedule"]
+    expected_usage_config: JSONValue
+    descHTML: str
+    notifyHTML: str
+
     defaults = {
         "id": None,
         "device_id": None,
         "name": "",
         "active": False,
-        "flow_rate": 0,
+        "flow_rate": 0.0,
         "duration": 0,
         "notify_every": 0,
         "advanced_low_flow": False,
@@ -221,33 +371,40 @@ class UsageAlertRule(FlumeModel):
     nested = {"shutoff_config": ShutoffConfig}
 
     @property
-    def duration_hour_min(self):
+    def duration_hour_min(self) -> Dict[str, int]:
         return {"hour": self.duration // 60, "min": self.duration % 60}
 
     @duration_hour_min.setter
-    def duration_hour_min(self, value):
+    def duration_hour_min(self, value: Mapping[str, int]) -> None:
         self.duration = 60 * value["hour"] + value["min"]
 
     @property
-    def notify_every_day_hour(self):
+    def notify_every_day_hour(self) -> Dict[str, int]:
         return {
             "day": self.notify_every // (60 * 24),
             "hour": (self.notify_every // 60) % 24,
         }
 
     @notify_every_day_hour.setter
-    def notify_every_day_hour(self, value):
+    def notify_every_day_hour(self, value: Mapping[str, int]) -> None:
         self.notify_every = 24 * value["day"] * 60 + 60 * value["hour"]
 
 
 class Budget(FlumeModel):
     """Daily, weekly, or monthly water budget."""
 
+    id: Optional[ResourceId]
+    name: str
+    type: Optional[str]
+    value: float
+    thresholds: List[JSONValue]
+    actual: Optional[float]
+
     defaults = {
         "id": None,
         "name": "",
         "type": None,
-        "value": 0,
+        "value": 0.0,
         "thresholds": [],
         "actual": None,
     }
@@ -255,6 +412,17 @@ class Budget(FlumeModel):
 
 class Subscription(FlumeModel):
     """Notification subscription or emergency contact."""
+
+    id: Optional[ResourceId]
+    user_id: Optional[ResourceId]
+    alert_type: Optional[str]
+    alert_info: JSONValue
+    device_id: Optional[ResourceId]
+    notification_types: int
+    created_datetime: Optional[str]
+    updated_datetime: Optional[str]
+    emergency_contact: bool
+    contact_name: Optional[str]
 
     defaults = {
         "id": None,
@@ -269,18 +437,35 @@ class Subscription(FlumeModel):
         "contact_name": None,
     }
 
-    def has_notification_type(self, notification_type):
+    def has_notification_type(self, notification_type: int) -> bool:
         return bool(self.notification_types & notification_type)
 
-    def enable_notification_type(self, notification_type):
+    def enable_notification_type(self, notification_type: int) -> None:
         self.notification_types |= notification_type
 
-    def disable_notification_type(self, notification_type):
+    def disable_notification_type(self, notification_type: int) -> None:
         self.notification_types &= ~notification_type
 
 
 class DoNotAlertSchedule(FlumeModel):
     """Portal Do Not Alert schedule."""
+
+    id: Optional[ResourceId]
+    device_id: Optional[ResourceId]
+    name: str
+    description: str
+    currently_active: bool
+    start_time: str
+    end_time: str
+    last_start: str
+    last_end: str
+    next_start: str
+    next_end: str
+    span_types: List[JSONValue]
+    rrule_str: str
+    rrule_obj: JSONDict
+    created_datetime: str
+    updated_datetime: str
 
     defaults = {
         "id": None,
@@ -314,11 +499,27 @@ class DoNotAlertSchedule(FlumeModel):
 class LocationAccess(FlumeModel):
     """Shared location access record."""
 
-    defaults = {"id": None, "user_id": None, "location_id": None, "email_address": None}
+    id: Optional[ResourceId]
+    user_id: Optional[ResourceId]
+    location_id: Optional[ResourceId]
+    email_address: Optional[str]
+
+    defaults = {
+        "id": None,
+        "user_id": None,
+        "location_id": None,
+        "email_address": None,
+    }
 
 
 class Integration(FlumeModel):
     """External device integration, including shutoff valves."""
+
+    id: Optional[ResourceId]
+    type: Optional[str]
+    state: JSONValue
+    status: JSONValue
+    device_id: Optional[ResourceId]
 
     defaults = {
         "id": None,
@@ -332,6 +533,12 @@ class Integration(FlumeModel):
 class Span(FlumeModel):
     """Water-usage span/appliance classification."""
 
+    id: Optional[ResourceId]
+    device_id: Optional[ResourceId]
+    type: Optional[str]
+    start_datetime: Optional[str]
+    end_datetime: Optional[str]
+
     defaults = {
         "id": None,
         "device_id": None,
@@ -344,11 +551,21 @@ class Span(FlumeModel):
 class SpanType(FlumeModel):
     """Available span classification metadata."""
 
+    id: Optional[ResourceId]
+    name: Optional[str]
+    type: Optional[str]
+    display: JSONValue
+
     defaults = {"id": None, "name": None, "type": None, "display": None}
 
 
 class Leak(FlumeModel):
     """Leak status or leak event."""
+
+    id: Optional[ResourceId]
+    device_id: Optional[ResourceId]
+    active: bool
+    created_datetime: Optional[str]
 
     defaults = {
         "id": None,
@@ -359,31 +576,60 @@ class Leak(FlumeModel):
 
 
 class PurchaseOption(FlumeModel):
-    """Device purchase option."""
+    """Device purchase option exposed by the customer portal."""
+
+    id: Optional[ResourceId]
+    type: Optional[str]
+    link: Optional[str]
+    price: JSONValue
+
+    defaults = {
+        "id": None,
+        "type": None,
+        "link": None,
+        "price": None,
+    }
 
 
 class Contact(FlumeModel):
     """Flume support contact information."""
 
+    id: Optional[ResourceId]
+    category: Optional[str]
+    type: Optional[str]
+    detail: JSONValue
+
     defaults = {"id": None, "category": None, "type": None, "detail": None}
 
 
 class Insurer(FlumeModel):
-    """Insurer metadata."""
+    """Undocumented insurer metadata; all returned fields remain accessible."""
 
 
 class ApiClient(FlumeModel):
-    """Generated Personal API client metadata."""
+    """Undocumented API-client metadata; all returned fields remain accessible."""
 
 
 class ProService(FlumeModel):
     """Local professional service listing displayed by the portal."""
+
+    name: Optional[str]
+    url: Optional[str]
 
     defaults = {"name": None, "url": None}
 
 
 class AccuracyResult(FlumeModel):
     """Meter-accuracy precheck or comparison result."""
+
+    type: Optional[str]
+    title: Optional[str]
+    description: Optional[str]
+    accuracy: Optional[float]
+    since_url: Optional[str]
+    until_url: Optional[str]
+    reading_diff: Optional[float]
+    queried_diff: Optional[float]
 
     defaults = {
         "type": None,
@@ -398,18 +644,35 @@ class AccuracyResult(FlumeModel):
 
 
 class LocationProfiles(FlumeModel):
-    """Appliance/profile metadata returned by `/location-profiles`."""
+    """Appliance/profile metadata returned by ``/location-profiles``."""
+
+    residents: JSONValue
+    bathrooms: JSONValue
+    indoor: List[JSONValue]
+    outdoor: List[JSONValue]
 
     defaults = {"residents": None, "bathrooms": None, "indoor": [], "outdoor": []}
 
 
-def modelize(value, model):
+@overload
+def modelize(value: List[Mapping[str, Any]], model: Type[ModelT]) -> List[ModelT]: ...
+
+
+@overload
+def modelize(value: Mapping[str, Any], model: Type[ModelT]) -> ModelT: ...
+
+
+@overload
+def modelize(value: JSONValue, model: None) -> JSONValue: ...
+
+
+def modelize(value: Any, model: Optional[Type[ModelT]]) -> Any:
     """Convert API data to one model or a list of models."""
     if model is None:
         return value
     if isinstance(value, list):
         return [model(item) if not isinstance(item, model) else item for item in value]
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return model(value)
     return value
 

@@ -1,15 +1,17 @@
 """Retrieve notifications from Flume API."""
 
-from typing import Any, Dict, Optional
+from typing import Any, List, Optional, Union, cast
 
 from requests import Session
 
+from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
 from .constants import (  # noqa: WPS300
     API_BASE_URL,
     API_NOTIFICATIONS_URL,
     DEFAULT_TIMEOUT,
 )
 from .models import Notification, modelize  # noqa: WPS300
+from .types import JSONDict, RequestParams  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -21,9 +23,9 @@ class FlumeNotificationList:
 
     def __init__(  # noqa: WPS211
         self,
-        flume_auth,
+        flume_auth: Union[FlumeAuth, FlumePortalAuth],
         http_session: Optional[Session] = None,
-        timeout: int = DEFAULT_TIMEOUT,
+        timeout: float = DEFAULT_TIMEOUT,
         read: str = "false",
         sort_direction: str = "ASC",
     ) -> None:
@@ -37,25 +39,25 @@ class FlumeNotificationList:
             read: state of notification list, default "false".
             sort_direction: Which direction to sort notifications on, default "ASC".
         """
-        self._timeout = timeout
-        self._flume_auth = flume_auth
-        self._read = read
-        self._sort_direction = sort_direction
-        self._http_session = http_session or Session()
-        self.has_next = False
-        self.next_page = None
-        self.notification_list = self.get_notifications()
+        self._timeout: float = timeout
+        self._flume_auth: Union[FlumeAuth, FlumePortalAuth] = flume_auth
+        self._read: str = read
+        self._sort_direction: str = sort_direction
+        self._http_session: Session = http_session or Session()
+        self.has_next: bool = False
+        self.next_page: Optional[str] = None
+        self.notification_list: List[Notification] = self.get_notifications()
 
-    def get_notifications(self) -> Dict[str, Any]:
+    def get_notifications(self) -> List[Notification]:
         """Return all notifications from devices owned by the user.
 
         Returns:
-            Dict[str, Any]: Notification JSON message from API.
+            List[Notification]: Typed notification models.
         """
 
         api_url = API_NOTIFICATIONS_URL.format(user_id=self._flume_auth.user_id)
 
-        query_string = {
+        query_string: RequestParams = {
             "limit": "50",
             "offset": "0",
             "sort_direction": self._sort_direction,
@@ -64,7 +66,7 @@ class FlumeNotificationList:
 
         return self._get_notification_request(api_url, query_string)
 
-    def get_next_notifications(self):
+    def get_next_notifications(self) -> List[Notification]:
         """Return next page of notification from devices owned by the user.
 
         Returns:
@@ -75,12 +77,12 @@ class FlumeNotificationList:
         """
         if self.has_next:
             api_url = f"{API_BASE_URL}{self.next_page}"
-            query_string = {}
+            query_string: RequestParams = {}
         else:
             raise ValueError("No next page available.")
         return self._get_notification_request(api_url, query_string)
 
-    def _has_next_page(self, response_json):
+    def _has_next_page(self, response_json: Optional[JSONDict]) -> bool:
         """Return True if the next page exists.
 
         Args:
@@ -89,15 +91,16 @@ class FlumeNotificationList:
         Returns:
             Boolean: Returns true if next page exists, False if not.
         """
-        if response_json is None or response_json.get("pagination") is None:
+        if response_json is None:
             return False
+        pagination = response_json.get("pagination")
+        return isinstance(pagination, dict) and pagination.get("next") is not None
 
-        return (
-            "next" in response_json["pagination"]
-            and response_json["pagination"]["next"] is not None
-        )
-
-    def _get_notification_request(self, api_url, query_string):
+    def _get_notification_request(
+        self,
+        api_url: str,
+        query_string: RequestParams,
+    ) -> List[Notification]:
         """Make an API request to get usage alerts from the Flume API.
 
         Args:
@@ -112,7 +115,7 @@ class FlumeNotificationList:
             "GET",
             api_url,
             headers=self._flume_auth.authorization_header,
-            params=query_string,
+            params=cast(Any, query_string),
             timeout=self._timeout,
         )
 

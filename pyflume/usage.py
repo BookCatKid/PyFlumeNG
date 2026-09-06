@@ -1,7 +1,10 @@
-"""Retrieve usage alert notifications from Flume API."""
+"""Retrieve usage alert notifications from the Flume API."""
+
+from typing import Any, List, Optional, Type, TypeVar, Union, cast
 
 from requests import Session
 
+from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
 from .constants import (  # noqa: WPS300
     API_BASE_URL,
     API_USAGE_RULE_URL,
@@ -9,11 +12,13 @@ from .constants import (  # noqa: WPS300
     API_USAGE_URL,
     DEFAULT_TIMEOUT,
 )
-from .models import UsageAlert, UsageAlertRule, modelize  # noqa: WPS300
+from .models import FlumeModel, UsageAlert, UsageAlertRule, modelize  # noqa: WPS300
+from .types import JSONDict, JSONValue, RequestParams, ResourceId  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
 LOGGER = configure_logger(__name__)
+ModelT = TypeVar("ModelT", bound=FlumeModel)
 
 
 class FlumeUsageAlertList:
@@ -21,11 +26,11 @@ class FlumeUsageAlertList:
 
     def __init__(
         self,
-        flume_auth,
-        http_session=None,
-        timeout=DEFAULT_TIMEOUT,
-        read="false",
-    ):
+        flume_auth: Union[FlumeAuth, FlumePortalAuth],
+        http_session: Optional[Session] = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        read: str = "false",
+    ) -> None:
         """
 
         Initialize the data object.
@@ -37,20 +42,20 @@ class FlumeUsageAlertList:
             read: state of usage alert list, have they been read, not read.
 
         """
-        self._timeout = timeout
-        self._flume_auth = flume_auth
-        self._read = read
+        self._timeout: float = timeout
+        self._flume_auth: Union[FlumeAuth, FlumePortalAuth] = flume_auth
+        self._read: str = read
 
         if http_session is None:
-            self._http_session = Session()
+            self._http_session: Session = Session()
         else:
             self._http_session = http_session
 
-        self.has_next = None
-        self.next_page = None
-        self.usage_alert_list = self.get_usage_alerts()
+        self.has_next: bool = False
+        self.next_page: Optional[str] = None
+        self.usage_alert_list: List[UsageAlert] = self.get_usage_alerts()
 
-    def get_usage_alerts(self):
+    def get_usage_alerts(self) -> List[UsageAlert]:
         """Return initial page of usage alerts from devices owned by the user.
 
         Returns:
@@ -58,15 +63,15 @@ class FlumeUsageAlertList:
         """
 
         api_url = API_USAGE_URL.format(user_id=self._flume_auth.user_id)
-        query_string = {
+        query_string: RequestParams = {
             "limit": "50",
             "offset": "0",
             "sort_direction": "ASC",
             "read": self._read,
         }
-        return self._get_usage_request(api_url, query_string)
+        return cast(List[UsageAlert], self._get_usage_request(api_url, query_string))
 
-    def get_next_usage_alerts(self):
+    def get_next_usage_alerts(self) -> List[UsageAlert]:
         """Return next page of usage alerts from devices owned by the user.
 
         Returns:
@@ -77,12 +82,12 @@ class FlumeUsageAlertList:
         """
         if self.has_next:
             api_url = f"{API_BASE_URL}{self.next_page}"
-            query_string = {}
+            query_string: RequestParams = {}
         else:
             raise ValueError("No next page available.")
-        return self._get_usage_request(api_url, query_string)
+        return cast(List[UsageAlert], self._get_usage_request(api_url, query_string))
 
-    def get_usage_alert_rules(self, device_id):
+    def get_usage_alert_rules(self, device_id: ResourceId) -> List[UsageAlertRule]:
         """Return usage alert rules configured for a device.
 
         Args:
@@ -95,14 +100,21 @@ class FlumeUsageAlertList:
             user_id=self._flume_auth.user_id,
             device_id=device_id,
         )
-        return self._get_usage_request(
-            api_url,
-            {},
-            update_pagination=False,
-            model=UsageAlertRule,
+        return cast(
+            List[UsageAlertRule],
+            self._get_usage_request(
+                api_url,
+                {},
+                update_pagination=False,
+                model=UsageAlertRule,
+            ),
         )
 
-    def get_usage_alert_rule(self, device_id, rule_id):
+    def get_usage_alert_rule(
+        self,
+        device_id: ResourceId,
+        rule_id: ResourceId,
+    ) -> List[UsageAlertRule]:
         """Return a single usage alert rule for a device.
 
         Args:
@@ -117,14 +129,22 @@ class FlumeUsageAlertList:
             device_id=device_id,
             rule_id=rule_id,
         )
-        return self._get_usage_request(
-            api_url,
-            {},
-            update_pagination=False,
-            model=UsageAlertRule,
+        return cast(
+            List[UsageAlertRule],
+            self._get_usage_request(
+                api_url,
+                {},
+                update_pagination=False,
+                model=UsageAlertRule,
+            ),
         )
 
-    def update_usage_alert_rule(self, device_id, rule_id, payload):
+    def update_usage_alert_rule(
+        self,
+        device_id: ResourceId,
+        rule_id: ResourceId,
+        payload: JSONDict,
+    ) -> JSONValue:
         """Update a usage alert rule for a device.
 
         Example:
@@ -159,7 +179,12 @@ class FlumeUsageAlertList:
 
         return response.json()["data"]
 
-    def set_usage_alert_rule_active(self, device_id, rule_id, active):
+    def set_usage_alert_rule_active(
+        self,
+        device_id: ResourceId,
+        rule_id: ResourceId,
+        active: bool,
+    ) -> JSONValue:
         """Enable or disable a usage alert rule for a device.
 
         Args:
@@ -176,7 +201,7 @@ class FlumeUsageAlertList:
             {"active": bool(active)},
         )
 
-    def _has_next_page(self, response_json):
+    def _has_next_page(self, response_json: Optional[JSONDict]) -> bool:
         """Return True if the next page exists.
 
         Args:
@@ -185,21 +210,18 @@ class FlumeUsageAlertList:
         Returns:
             Boolean: Returns true if next page exists, False if not.
         """
-        if response_json is None or response_json.get("pagination") is None:
+        if response_json is None:
             return False
-
-        return (
-            "next" in response_json["pagination"]
-            and response_json["pagination"]["next"] is not None
-        )
+        pagination = response_json.get("pagination")
+        return isinstance(pagination, dict) and pagination.get("next") is not None
 
     def _get_usage_request(
         self,
-        api_url,
-        query_string,
-        update_pagination=True,
-        model=UsageAlert,
-    ):
+        api_url: str,
+        query_string: RequestParams,
+        update_pagination: bool = True,
+        model: Type[FlumeModel] = UsageAlert,
+    ) -> List[FlumeModel]:
         """Make an API request to get usage alerts from the Flume API.
 
         Args:
@@ -217,7 +239,7 @@ class FlumeUsageAlertList:
             "GET",
             api_url,
             headers=self._flume_auth.authorization_header,
-            params=query_string,
+            params=cast(Any, query_string),
             timeout=self._timeout,
         )
 
@@ -228,7 +250,7 @@ class FlumeUsageAlertList:
 
         response_json = response.json()
         if not update_pagination:
-            return modelize(response_json["data"], model)
+            return cast(List[FlumeModel], modelize(response_json["data"], model))
 
         if self._has_next_page(response_json):
             self.next_page = response_json["pagination"]["next"]
@@ -240,4 +262,4 @@ class FlumeUsageAlertList:
             self.has_next = False
             self.next_page = None
             LOGGER.debug("No further pages for Usage results.")
-        return modelize(response_json["data"], model)
+        return cast(List[FlumeModel], modelize(response_json["data"], model))

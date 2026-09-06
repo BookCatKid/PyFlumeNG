@@ -122,9 +122,7 @@ def test_usage_rule_read_does_not_change_legacy_usage_pagination(requests_mock):
     from pyflume import FlumeUsageAlertList
 
     usage_url = "https://api.flumetech.com/users/12345/usage-alerts"
-    rule_url = (
-        "https://api.flumetech.com/users/12345/devices/device/rules/" "usage-alerts"
-    )
+    rule_url = "https://api.flumetech.com/users/12345/devices/device/rules/usage-alerts"
     requests_mock.get(
         usage_url,
         json={
@@ -219,7 +217,7 @@ def test_rate_limit_state_ignores_invalid_header_values():
 
 def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
     """Rule updates use the portal-capable endpoint and preserve empty data."""
-    url = API_BASE_URL + "/users/12345/devices/device/rules/" "usage-alerts/rule"
+    url = API_BASE_URL + "/users/12345/devices/device/rules/usage-alerts/rule"
     requests_mock.patch(url, json={"success": True, "code": 612, "data": []})
     client = FlumeClient(
         PortalAuth("user@example.com", "password", flume_token=token())
