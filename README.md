@@ -6,10 +6,10 @@ portal write operations, typed resource models, pagination, response/error
 handling, rate-limit state, and the endpoint surface used by Flume's customer
 portal.
 
-PyFlumeNG is not on PyPI yet. Install it directly from GitHub:
+Install PyFlumeNG from PyPI:
 
 ```bash
-pip install git+https://github.com/BookCatKid/PyFlumeNG.git
+pip install PyFlumeNG
 ```
 
 ## Authentication
