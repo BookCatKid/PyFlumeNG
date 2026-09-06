@@ -45,8 +45,38 @@ data = pyflume.FlumeData(
 ```
 
 `update()` applies the legacy rate limiter. `update_force()` performs the query
-immediately. `query_payload` is a typed `QueryPayload`, and `values` is a
-`QueryValues` mapping from request IDs to numeric values or `None`.
+immediately. The default `scan_interval` is 60 minutes. When you pass a custom
+`query_payload`, PyFlumeNG sends that payload unchanged on every update and the
+scan interval is not used. `query_payload` is a typed `QueryPayload`, and
+`values` is a `QueryValues` mapping from request IDs to numeric values or
+`None`.
+
+To start from PyFlumeNG's standard query set and customize it, generate the
+payload without constructing a `FlumeData` instance:
+
+```python
+payload = pyflume.FlumeData.generate_api_query_payload(
+    timedelta(minutes=60),
+    "America/Los_Angeles",
+)
+payload["queries"].append(
+    {
+        "request_id": "custom_window",
+        "bucket": "HR",
+        "since_datetime": "2026-09-01 00:00:00",
+        "until_datetime": "2026-09-02 00:00:00",
+        "operation": "SUM",
+        "units": "GALLONS",
+    }
+)
+
+data = pyflume.FlumeData(
+    flume_auth=auth,
+    device_id="your_device_id",
+    device_tz="America/Los_Angeles",
+    query_payload=payload,
+)
+```
 
 For arbitrary queries and current flow, use the typed `FlumeClient.query()` and
 `get_current_flow()` methods documented in the [API reference](api-reference.md).

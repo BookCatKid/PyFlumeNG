@@ -42,7 +42,7 @@ class FlumeData:
         flume_auth: Union[FlumeAuth, FlumePortalAuth],
         device_id: ResourceId,
         device_tz: str,
-        scan_interval: timedelta,
+        scan_interval: timedelta = timedelta(minutes=60),
         update_on_init: bool = True,
         http_session: Optional[Session] = None,
         timeout: float = DEFAULT_TIMEOUT,
@@ -69,8 +69,9 @@ class FlumeData:
         self.device_id: ResourceId = device_id
         self.device_tz: str = device_tz
         self.values: QueryValues = {}  # noqa: WPS110
+        self._uses_default_query_payload = query_payload is None
         if query_payload is None:
-            self.query_payload = self._generate_api_query_payload(
+            self.query_payload = self.generate_api_query_payload(
                 self._scan_interval,
                 device_tz,
             )
@@ -80,9 +81,6 @@ class FlumeData:
             self._http_session: Session = Session()
         else:
             self._http_session = http_session
-        self._query_keys: List[str] = [
-            query["request_id"] for query in self.query_payload["queries"]
-        ]
         if update_on_init:
             self.update()
 
@@ -100,10 +98,12 @@ class FlumeData:
 
     def update_force(self) -> None:
         """Return updated value for session without auto retry or limits."""
-        self.query_payload = self._generate_api_query_payload(
-            self._scan_interval,
-            self.device_tz,
-        )
+        if self._uses_default_query_payload:
+            self.query_payload = self.generate_api_query_payload(
+                self._scan_interval,
+                self.device_tz,
+            )
+        query_keys = [query["request_id"] for query in self.query_payload["queries"]]
 
         url = API_QUERY_URL.format(
             user_id=self._flume_auth.user_id,
@@ -131,8 +131,8 @@ class FlumeData:
         # Step 1: Initialize an empty dictionary
         values_dict: QueryValues = {}
 
-        # Step 2: Loop through each key in self._query_keys
-        for key in self._query_keys:
+        # Step 2: Loop through each key requested in the payload that was sent
+        for key in query_keys:
             # Step 3: Check the length of the responses for the current key
             if len(responses[key]) == 1:
                 # Step 4: Assign the value to the dictionary if the condition is met
@@ -144,8 +144,9 @@ class FlumeData:
         # Step 6: Assign the result to self.values
         self.values = values_dict  # noqa: WPS110
 
-    def _generate_api_query_payload(
-        self,
+    @classmethod
+    def generate_api_query_payload(
+        cls,
         scan_interval: timedelta,
         device_tz: str,
     ) -> QueryPayload:
@@ -158,6 +159,7 @@ class FlumeData:
         Returns:
             JSON: API Query to retrieve API details.
         """
+        _ = cls
         datetime_localtime = datetime.now(timezone.utc).astimezone(ZoneInfo(device_tz))
 
         queries: List[QuerySpec] = [

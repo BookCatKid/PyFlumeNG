@@ -1201,7 +1201,9 @@ class FlumeClient:
         ``YYYY-MM-DD HH:MM:SS`` format. When ``span_types`` is omitted, the
         same classification keys used by the current customer portal are sent.
         """
-        selected_types = span_types or DEFAULT_PORTAL_SPAN_TYPES
+        if isinstance(span_types, str):
+            raise TypeError("span_types must be a sequence of strings, not a string")
+        selected_types = DEFAULT_PORTAL_SPAN_TYPES if span_types is None else span_types
         params: RequestParams = {
             "since_datetime": since_datetime,
             "until_datetime": until_datetime,

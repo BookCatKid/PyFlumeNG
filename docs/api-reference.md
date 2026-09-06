@@ -241,12 +241,14 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 
 Get the latest data and update the states.
 
-- `FlumeData(flume_auth: Union[FlumeAuth, FlumePortalAuth], device_id: ResourceId, device_tz: str, scan_interval: timedelta, update_on_init: bool = True, http_session: Optional[Session] = None, timeout: float = DEFAULT_TIMEOUT, query_payload: Optional[QueryPayload] = None) -> None`
+- `FlumeData(flume_auth: Union[FlumeAuth, FlumePortalAuth], device_id: ResourceId, device_tz: str, scan_interval: timedelta = timedelta(minutes=60), update_on_init: bool = True, http_session: Optional[Session] = None, timeout: float = DEFAULT_TIMEOUT, query_payload: Optional[QueryPayload] = None) -> None`
   Initialize the data object.
 - `update() -> None`
   Return updated value for session.
 - `update_force() -> None`
   Return updated value for session without auto retry or limits.
+- `generate_api_query_payload(scan_interval: timedelta, device_tz: str) -> QueryPayload`
+  Generate API Query payload to support getting data from Flume API.
 
 ### `FlumeDeviceList`
 

@@ -622,3 +622,18 @@ def test_legacy_resource_classes_return_models(requests_mock):
 
     assert isinstance(devices.device_list[0], Device)
     assert leaks.leak_alert_list[0].active is True
+
+
+def test_list_spans_rejects_string_span_types(requests_mock):
+    """A single string must not be split into one-character span types."""
+    url = API_BASE_URL + "/users/12345/devices/device/spans"
+    requests_mock.get(url, json={"success": True, "data": []})
+    client = FlumeClient(auth())
+
+    with pytest.raises(TypeError, match="span_types"):
+        client.list_spans(
+            "device",
+            "2026-09-06 10:00:00",
+            "2026-09-06 11:00:00",
+            span_types="OUTDOOR",  # type: ignore[arg-type]
+        )
