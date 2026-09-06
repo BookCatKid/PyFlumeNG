@@ -5,6 +5,7 @@ from typing import (
     Iterator,
     List,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Type,
@@ -50,6 +51,18 @@ from .models import (
 from .types import JSONDict, JSONValue, RequestParams, ResourceId
 
 ModelT = TypeVar("ModelT", bound=FlumeModel)
+
+DEFAULT_PORTAL_SPAN_TYPES: Tuple[str, ...] = (
+    "OUTDOOR",
+    "INDOOR",
+    "SHOWER",
+    "TOILET",
+    "SOFTENER",
+    "CLOTHES_WASHER",
+    "DISH_WASHER",
+    "POOL",
+    "REVERSE_OSMOSIS",
+)
 
 
 class FlumeClient:
@@ -296,8 +309,8 @@ class FlumeClient:
         return self.list_all(self._user_path("/devices"), params, Device)
 
     def list_portal_devices(self, **params: JSONValue) -> List[Device]:
-        """List devices through the portal's root device route."""
-        return self.list_all("/devices", params, Device)
+        """List devices using the user-scoped route with portal auth data."""
+        return self.list_devices(**params)
 
     def get_device(
         self, device_id: ResourceId, **params: JSONValue
@@ -312,10 +325,8 @@ class FlumeClient:
     def get_portal_device(
         self, device_id: ResourceId, **params: JSONValue
     ) -> Optional[Device]:
-        """Fetch one device through the portal's root device route."""
-        return self.data_one(
-            "GET", "/devices/{0}".format(device_id), Device, params=params
-        )
+        """Fetch one device using the user-scoped route with portal auth data."""
+        return self.get_device(device_id, **params)
 
     def query(self, device_id: ResourceId, payload: JSONDict) -> List[QueryResult]:
         return cast(
@@ -331,16 +342,8 @@ class FlumeClient:
     def portal_query(
         self, device_id: ResourceId, payload: JSONDict
     ) -> List[QueryResult]:
-        """Submit a query through the portal's root device route."""
-        return cast(
-            List[QueryResult],
-            self.data(
-                "POST",
-                "/devices/{0}/query".format(device_id),
-                QueryResult,
-                json=payload,
-            ),
-        )
+        """Run the read-only device query using the user-scoped route."""
+        return self.query(device_id, payload)
 
     def get_current_flow(self, device_id: ResourceId) -> Optional[CurrentFlow]:
         return self.data_one(
@@ -350,18 +353,16 @@ class FlumeClient:
         )
 
     def get_portal_current_flow(self, device_id: ResourceId) -> Optional[CurrentFlow]:
-        """Read current flow through the portal's root device route."""
-        return self.data_one(
-            "GET", "/devices/{0}/query/active".format(device_id), CurrentFlow
-        )
+        """Read current flow using the user-scoped route with portal auth."""
+        return self.get_current_flow(device_id)
 
     # Locations and account mutations.
     def list_locations(self, **params: JSONValue) -> List[Location]:
         return self.list_all(self._user_path("/locations"), params, Location)
 
     def list_portal_locations(self, **params: JSONValue) -> List[Location]:
-        """List locations through the portal's root location route."""
-        return self.list_all("/locations", params, Location)
+        """List locations using the user-scoped route with portal auth data."""
+        return self.list_locations(**params)
 
     def get_location_profiles(self) -> Optional[LocationProfiles]:
         """Fetch the portal's appliance/profile metadata."""
@@ -373,8 +374,8 @@ class FlumeClient:
         )
 
     def get_portal_location(self, location_id: ResourceId) -> Optional[Location]:
-        """Fetch one location through the portal's root location route."""
-        return self.data_one("GET", "/locations/{0}".format(location_id), Location)
+        """Fetch one location using the user-scoped route with portal auth data."""
+        return self.get_location(location_id)
 
     def create_location(self, payload: JSONDict) -> JSONValue:
         return self.data("POST", self._user_path("/locations"), json=payload)
@@ -415,8 +416,8 @@ class FlumeClient:
         return self.list_all(self._user_path("/notifications"), params, Notification)
 
     def list_portal_notifications(self, **params: JSONValue) -> List[Notification]:
-        """List notifications through the portal's root notification route."""
-        return self.list_all("/notifications", params, Notification)
+        """List notifications using the user-scoped route with portal auth data."""
+        return self.list_notifications(**params)
 
     def get_notification(self, notification_id: ResourceId) -> Optional[Notification]:
         return self.data_one(
@@ -428,10 +429,8 @@ class FlumeClient:
     def get_portal_notification(
         self, notification_id: ResourceId
     ) -> Optional[Notification]:
-        """Fetch one notification through the portal's root route."""
-        return self.data_one(
-            "GET", "/notifications/{0}".format(notification_id), Notification
-        )
+        """Fetch one notification using the user-scoped route with portal auth."""
+        return self.get_notification(notification_id)
 
     def update_notification(
         self, notification_id: ResourceId, payload: JSONDict
@@ -506,10 +505,8 @@ class FlumeClient:
         device_id: ResourceId,
         **params: JSONValue,
     ) -> List[UsageAlertRule]:
-        """List rules through the portal's root device route."""
-        return self.list_all(
-            "/devices/{0}/rules/usage-alerts".format(device_id), params, UsageAlertRule
-        )
+        """List usage rules using the user-scoped route with portal auth data."""
+        return self.list_usage_alert_rules(device_id, **params)
 
     def get_usage_alert_rule(
         self,
@@ -529,12 +526,8 @@ class FlumeClient:
         device_id: ResourceId,
         rule_id: ResourceId,
     ) -> Optional[UsageAlertRule]:
-        """Fetch one rule through the portal's root device route."""
-        return self.data_one(
-            "GET",
-            "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id),
-            UsageAlertRule,
-        )
+        """Fetch one usage rule using the user-scoped route with portal auth."""
+        return self.get_usage_alert_rule(device_id, rule_id)
 
     def create_usage_alert_rule(
         self, device_id: ResourceId, payload: JSONDict
@@ -672,8 +665,8 @@ class FlumeClient:
     def list_portal_budgets(
         self, device_id: ResourceId, **params: JSONValue
     ) -> List[Budget]:
-        """List budgets through the portal's root device route."""
-        return self.list_all("/devices/{0}/budgets".format(device_id), params, Budget)
+        """List budgets using the user-scoped route with portal auth data."""
+        return self.list_budgets(device_id, **params)
 
     def get_budget(
         self, device_id: ResourceId, budget_id: ResourceId
@@ -689,10 +682,8 @@ class FlumeClient:
         device_id: ResourceId,
         budget_id: ResourceId,
     ) -> Optional[Budget]:
-        """Fetch one budget using the portal service's collection GET form."""
-        return self.data_one(
-            "GET", "/devices/{0}/budgets/{1}".format(device_id, budget_id), Budget
-        )
+        """Fetch one budget using the user-scoped route with portal auth."""
+        return self.get_budget(device_id, budget_id)
 
     def create_budget(self, device_id: ResourceId, payload: JSONDict) -> JSONValue:
         return self.data(
@@ -750,8 +741,8 @@ class FlumeClient:
         return self.list_all(self._user_path("/subscriptions"), params, Subscription)
 
     def list_portal_subscriptions(self, **params: JSONValue) -> List[Subscription]:
-        """List subscriptions through the portal's root route."""
-        return self.list_all("/subscriptions", params, Subscription)
+        """List subscriptions using the user-scoped route with portal auth data."""
+        return self.list_subscriptions(**params)
 
     def get_subscription(self, subscription_id: ResourceId) -> Optional[Subscription]:
         return self.data_one(
@@ -763,10 +754,8 @@ class FlumeClient:
     def get_portal_subscription(
         self, subscription_id: ResourceId
     ) -> Optional[Subscription]:
-        """Fetch a subscription through the portal's collection GET form."""
-        return self.data_one(
-            "GET", "/subscriptions/{0}".format(subscription_id), Subscription
-        )
+        """Fetch a subscription using the user-scoped route with portal auth."""
+        return self.get_subscription(subscription_id)
 
     def create_location_subscription(
         self,
@@ -998,10 +987,8 @@ class FlumeClient:
         location_id: ResourceId,
         **params: JSONValue,
     ) -> List[LocationAccess]:
-        """List sharing records through the portal's root location route."""
-        return self.list_all(
-            "/locations/{0}/access".format(location_id), params, LocationAccess
-        )
+        """List sharing records using the user-scoped route with portal auth."""
+        return self.list_location_access(location_id, **params)
 
     def get_location_access(
         self,
@@ -1019,12 +1006,8 @@ class FlumeClient:
         location_id: ResourceId,
         access_id: ResourceId,
     ) -> Optional[LocationAccess]:
-        """Fetch sharing records through the portal collection GET form."""
-        return self.data_one(
-            "GET",
-            "/locations/{0}/access/{1}".format(location_id, access_id),
-            LocationAccess,
-        )
+        """Fetch a sharing record using the user-scoped route with portal auth."""
+        return self.get_location_access(location_id, access_id)
 
     def grant_location_access(
         self, location_id: ResourceId, payload: JSONDict
@@ -1204,7 +1187,27 @@ class FlumeClient:
             Integration,
         )
 
-    def list_spans(self, device_id: ResourceId, **params: JSONValue) -> List[Span]:
+    def list_spans(
+        self,
+        device_id: ResourceId,
+        since_datetime: str,
+        until_datetime: str,
+        units: str = "gallons",
+        span_types: Optional[Sequence[str]] = None,
+    ) -> List[Span]:
+        """List portal usage spans for a time range and classification set.
+
+        ``since_datetime`` and ``until_datetime`` use the portal's
+        ``YYYY-MM-DD HH:MM:SS`` format. When ``span_types`` is omitted, the
+        same classification keys used by the current customer portal are sent.
+        """
+        selected_types = span_types or DEFAULT_PORTAL_SPAN_TYPES
+        params: RequestParams = {
+            "since_datetime": since_datetime,
+            "until_datetime": until_datetime,
+            "units": units,
+            "types": ",".join(selected_types),
+        }
         return self.list_all(
             self._user_path("/devices/{0}/spans".format(device_id)), params, Span
         )

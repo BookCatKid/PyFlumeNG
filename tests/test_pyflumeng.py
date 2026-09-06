@@ -1,6 +1,6 @@
 """Tests for the standalone PyFlumeNG package."""
 
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -8,11 +8,16 @@ from pyflume import (
     AccuracyResult,
     Budget,
     Device,
+    DoNotAlertSchedule,
     FlumeClient,
     FlumePortalAuth,
     FlumeResponse,
+    Notification,
     PersonalAuth,
+    Span,
+    SpanDataPoint,
     UsageAlertRule,
+    UsageAlertSchedule,
 )
 from pyflume.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
 from pyflume.constants import API_BASE_URL, URL_OAUTH_TOKEN
@@ -266,6 +271,47 @@ def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
     assert requests_mock.last_request.json() == {"active": False}
 
 
+def test_span_read_matches_live_portal_shape_and_roundtrips(requests_mock):
+    """Portal span reads expose the observed fields and typed series points."""
+    url = API_BASE_URL + "/users/12345/devices/device/spans"
+    payload = {
+        "id": "span-id",
+        "type": "OUTDOOR",
+        "start": "2026-09-06 10:00:00",
+        "end": "2026-09-06 10:02:00",
+        "data": [
+            {"datetime": "2026-09-06 10:00:00", "value": 0},
+            {"datetime": "2026-09-06 10:01:00", "value": 1.25},
+        ],
+        "is_editable": True,
+        "max_flowrate": 2.75,
+        "mode_gpm": 1.25,
+        "origin": "DISAGGREGATION",
+        "total": 2.5,
+        "value": 2.5,
+        "version": "1",
+    }
+    requests_mock.get(url, json={"success": True, "data": [payload]})
+
+    result = FlumeClient(auth()).list_spans(
+        "device",
+        "2026-09-06 10:00:00",
+        "2026-09-06 11:00:00",
+        span_types=["OUTDOOR", "SHOWER"],
+    )
+
+    assert len(result) == 1
+    assert isinstance(result[0], Span)
+    assert isinstance(result[0].data[0], SpanDataPoint)
+    assert result[0].data[1].value == 1.25
+    assert result[0].to_dict() == payload
+    assert requests_mock.last_request.qs["since_datetime"] == ["2026-09-06 10:00:00"]
+    assert requests_mock.last_request.qs["until_datetime"] == ["2026-09-06 11:00:00"]
+    assert requests_mock.last_request.qs["units"] == ["gallons"]
+    sent_query = parse_qs(urlsplit(requests_mock.last_request.url).query)
+    assert sent_query["types"] == ["OUTDOOR,SHOWER"]
+
+
 def test_portal_accuracy_payload_wrapper(requests_mock):
     """The accuracy helper constructs the same fields as the portal form."""
     requests_mock.post(
@@ -423,17 +469,94 @@ def test_rule_nested_schedules_round_trip_as_portal_models():
             "id": 1,
             "schedules": [
                 {
-                    "id": 16158,
+                    "schedule_id": 16158,
+                    "active": True,
                     "name": "Grass Watering",
-                    "currently_active": True,
+                    "description": "Suppress alerts while irrigation runs",
                 },
             ],
         },
     )
 
+    assert isinstance(rule.schedules[0], UsageAlertSchedule)
     assert rule.schedules[0].name == "Grass Watering"
-    assert rule.schedules[0].currently_active is True
-    assert rule.to_dict()["schedules"][0]["id"] == 16158
+    assert rule.schedules[0].active is True
+    assert rule.to_dict()["schedules"][0]["schedule_id"] == 16158
+
+
+def test_sparse_notification_extra_preserves_api_shape_on_round_trip():
+    """Typed defaults stay readable without inventing omitted API fields."""
+    payload = {
+        "id": 42,
+        "extra": {
+            "event_rule_name": "High Flow",
+            "query": {
+                "bucket": "MINUTE",
+                "request_id": "notification_query",
+            },
+        },
+    }
+
+    notification = Notification(payload)
+
+    assert notification.extra is not None
+    assert notification.extra.percentage is None
+    assert notification.extra.advanced_low_flow is False
+    assert notification.extra.query is not None
+    assert notification.extra.query.tz == ""
+    assert notification.to_dict() == payload
+
+
+def test_full_do_not_alert_schedule_allows_null_updated_datetime():
+    """The full schedule resource is distinct from a rule's compact association."""
+    schedule = DoNotAlertSchedule(
+        {
+            "id": 16158,
+            "updated_datetime": None,
+            "rrule_obj": {
+                "tzid": "America/Los_Angeles",
+                "dtstart": "2026-09-06T08:00:00",
+                "freq": "WEEKLY",
+                "interval": 1,
+                "byweekday": ["SU"],
+                "byhour": 8,
+                "byminute": 0,
+                "bysecond": 0,
+            },
+        },
+    )
+
+    assert schedule.updated_datetime is None
+    assert schedule.rrule_obj.freq == "WEEKLY"
+
+
+def test_portal_read_aliases_use_working_user_scoped_routes(requests_mock):
+    """Portal read aliases do not call the invalid guessed root routes."""
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices",
+        json={"success": True, "data": [{"id": "device"}]},
+    )
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/notifications",
+        json={"success": True, "data": [{"id": "notice"}]},
+    )
+    requests_mock.get(
+        API_BASE_URL + "/users/12345/devices/device/query/active",
+        json={"success": True, "data": [{"value": 1.5}]},
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    assert client.list_portal_devices()[0].id == "device"
+    assert client.list_portal_notifications()[0].id == "notice"
+    assert client.get_portal_current_flow("device").value == 1.5
+
+    assert [request.path for request in requests_mock.request_history] == [
+        "/users/12345/devices",
+        "/users/12345/notifications",
+        "/users/12345/devices/device/query/active",
+    ]
 
 
 def test_client_returns_typed_models(requests_mock):

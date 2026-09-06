@@ -28,22 +28,59 @@ and the portal surface. You could replace it with `PersonalAuth` for ordinary
 reads such as `list_devices()`, `list_notifications()`, `get_current_flow()`,
 and queries.
 
-## User-scoped and portal route variants
+## User-scoped reads with either token
 
-Some resources have two named methods because Flume's documented/user-scoped
-API and its customer portal use different route shapes. For example:
+Several early portal helpers were named as if the customer portal used a
+parallel set of root read routes. Live testing shows that many portal reads use
+the same user-scoped route as the Personal API. For example:
 
 ```python
 client.list_devices()  # /users/{user_id}/devices
-client.list_portal_devices()  # /devices
+client.list_portal_devices()  # delegates to list_devices()
 
 client.list_notifications()  # /users/{user_id}/notifications
-client.list_portal_notifications()  # /notifications
+client.list_portal_notifications()  # delegates to list_notifications()
 ```
 
 The unprefixed read methods are not “PersonalAuth-only.” `PortalAuth` can be
-used with them as well. The `portal` name describes the route used by Flume's
-customer web application, not a blanket restriction on every other method.
+used with them as well. Portal-only functionality is determined by what the
+token and endpoint accept, not by whether the URL starts at a root resource.
+
+Some additional reads are portal-only while still living below
+`/users/{user_id}/...`, including endpoints such as do-not-alert schedules,
+integrations, meter accuracy, purchase options, and location span types. The
+library keeps these as named typed methods and lets Flume report when a device
+does not support one of them.
+
+### Usage spans
+
+The portal span endpoint requires a time window, units, and a comma-separated
+classification filter. `list_spans()` now builds that request explicitly
+instead of accepting an undocumented bag of query parameters:
+
+```python
+spans = client.list_spans(
+    device_id,
+    since_datetime="2026-09-01 00:00:00",
+    until_datetime="2026-09-02 00:00:00",
+)
+
+print(spans[0].type)
+print(spans[0].total)
+print(spans[0].data[0].datetime, spans[0].data[0].value)
+```
+
+The date strings use the exact `YYYY-MM-DD HH:MM:SS` format used by Flume's
+current customer portal. `units` defaults to `"gallons"`. If `span_types` is
+omitted, PyFlumeNG sends the portal's current classification set (`OUTDOOR`,
+`INDOOR`, `SHOWER`, `TOILET`, `SOFTENER`, `CLOTHES_WASHER`, `DISH_WASHER`,
+`POOL`, and `REVERSE_OSMOSIS`). Pass your own sequence of strings to filter it.
+
+Live portal responses contained `id`, `type`, `start`, `end`, `data`,
+`is_editable`, `max_flowrate`, `mode_gpm`, `origin`, `total`, `value`, and
+`version`. Each `data` entry is a typed `SpanDataPoint` with `datetime` and a
+numeric `value`. PersonalAuth returned 404 for this endpoint during live
+validation, while PortalAuth returned the span data on a supported device.
 
 For writes where the portal's broader token is known to be required,
 `FlumeClient` checks the auth capability before making the request. Examples
@@ -75,6 +112,11 @@ alerts = client.list_usage_alerts()  # list[UsageAlert]
 rules = client.list_usage_alert_rules(device_id)  # list[UsageAlertRule]
 accuracy = client.get_meter_accuracy(device_id)  # list[AccuracyResult]
 ```
+
+On a live supported meter, `get_meter_accuracy()` returned a one-item list
+whose object contained exactly `type`, `title`, and `description`. The model
+also has optional comparison fields because related accuracy flows may return
+them, but callers should not assume those fields are present on the GET.
 
 Known fields are discoverable in an IDE and checked by static type checkers.
 Models remain open to new fields added by Flume: unknown response keys remain

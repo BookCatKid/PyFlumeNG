@@ -17,7 +17,8 @@ works with either token.
 | OAuth flow | Documented Personal API password grant | Customer-portal authorization-code flow |
 | Normal user-scoped reads | Yes | Yes |
 | Legacy helpers | Yes | Yes |
-| Portal-root reads | Not the intended token | Yes |
+| Ordinary user-scoped reads | Yes | Yes |
+| Extra portal-only read endpoints | Usually no | Yes |
 | Portal-only writes | No | Yes |
 
 For example, these are all normal read operations and may be used with either
@@ -30,10 +31,16 @@ auth object:
 - the legacy `FlumeData`, `FlumeDeviceList`, `FlumeLeakList`,
   `FlumeNotificationList`, and `FlumeUsageAlertList` helpers.
 
-Use `PortalAuth` when you need the customer-portal route surface or a write that
-requires the portal token's broader scope. The most important known example is
-creating, editing, enabling/disabling, or deleting usage-alert rules through
-the portal routes.
+Use `PortalAuth` when you need an endpoint that Flume exposes only to the
+customer-portal token or a write that requires its broader scope. Live testing
+shows that the portal token still uses the normal `/users/{user_id}/...` routes
+for many resources; a portal token does **not** imply that a matching root
+`/devices`, `/locations`, or `/notifications` read route exists.
+
+Examples observed as portal-only reads include do-not-alert schedules,
+integrations, meter-accuracy information, purchase options, location span
+types, and professional services. Availability can also depend on the device
+or account.
 
 ## Personal API
 
@@ -83,8 +90,8 @@ used by Flume's web application.
 
 The resulting auth object has `personal_api`, `portal_api`, and
 `portal_writes` capabilities. That is why it can be passed to the same
-user-scoped read helpers as `PersonalAuth` while also being able to call the
-portal routes. Its `RateLimitState` starts with the portal baseline of 72,000
+user-scoped read helpers as `PersonalAuth` while also unlocking additional
+portal-only operations. Its `RateLimitState` starts with the portal baseline of 72,000
 requests and, like PersonalAuth, is replaced by values reported in response
 headers.
 

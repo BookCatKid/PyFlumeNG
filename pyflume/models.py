@@ -17,6 +17,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Set,
     Type,
     TypeVar,
     Union,
@@ -36,6 +37,7 @@ class FlumeModel:
 
     defaults: ClassVar[Dict[str, Any]] = {}
     nested: ClassVar[Dict[str, ModelFactory]] = {}
+    _present_fields: Set[str]
 
     def __init__(
         self,
@@ -44,8 +46,9 @@ class FlumeModel:
     ) -> None:
         source = dict(value or {})
         source.update(fields)
+        object.__setattr__(self, "_present_fields", set(source))
         for key, default in self.defaults.items():
-            setattr(self, key, deepcopy(default))
+            object.__setattr__(self, key, deepcopy(default))
         for key, item in source.items():
             model = self.nested.get(key)
             if model is not None and item is not None:
@@ -56,7 +59,15 @@ class FlumeModel:
                     ]
                 elif isinstance(item, Mapping):
                     item = model(item)
-            setattr(self, key, item)
+            object.__setattr__(self, key, item)
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        object.__setattr__(self, key, value)
+        if key.startswith("_"):
+            return
+        present_fields = self.__dict__.get("_present_fields")
+        if present_fields is not None:
+            present_fields.add(key)
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -80,8 +91,9 @@ class FlumeModel:
 
     def to_dict(self) -> JSONDict:
         result: Dict[str, Any] = {}
+        present_fields = self._present_fields
         for key, value in self.__dict__.items():
-            if key.startswith("_"):
+            if key.startswith("_") or key not in present_fields:
                 continue
             if isinstance(value, FlumeModel):
                 value = value.to_dict()
@@ -135,12 +147,16 @@ class FlumeResponse(FlumeModel, Generic[ResponseT]):
     ) -> None:
         super().__init__(value)
         if model is not None and isinstance(self.data, list):
-            self.data = cast(
-                Any,
-                modelize(cast(List[Mapping[str, Any]], self.data), model),
+            object.__setattr__(
+                self,
+                "data",
+                cast(
+                    Any,
+                    modelize(cast(List[Mapping[str, Any]], self.data), model),
+                ),
             )
         elif model is not None and isinstance(self.data, Mapping):
-            self.data = cast(Any, modelize(self.data, model))
+            object.__setattr__(self, "data", cast(Any, modelize(self.data, model)))
 
     @property
     def next_url(self) -> Optional[str]:
@@ -166,6 +182,9 @@ class User(FlumeModel):
     phone: Optional[str]
     status: Optional[str]
     signup_datetime: Optional[str]
+    invalidate_datetime: Optional[str]
+    plan: Optional["UserPlan"]
+    referral_link: Optional[str]
 
     defaults = {
         "id": None,
@@ -176,6 +195,9 @@ class User(FlumeModel):
         "phone": None,
         "status": None,
         "signup_datetime": None,
+        "invalidate_datetime": None,
+        "plan": None,
+        "referral_link": None,
     }
 
     @property
@@ -183,6 +205,114 @@ class User(FlumeModel):
         return " ".join(
             part for part in (self.first_name, self.last_name) if part
         ).strip()
+
+
+class UserPlan(FlumeModel):
+    """Subscription/entitlement details returned with portal user reads."""
+
+    entitlement: str
+    expire_datetime: Optional[str]
+    frequency: Optional[str]
+    one_time_purchase: bool
+    origin: str
+    prev_origin: Optional[str]
+    price: Optional[Union[int, float, str]]
+    renews: bool
+    subscribed: bool
+    trial: bool
+
+    defaults = {
+        "entitlement": "",
+        "expire_datetime": None,
+        "frequency": None,
+        "one_time_purchase": False,
+        "origin": "",
+        "prev_origin": None,
+        "price": None,
+        "renews": False,
+        "subscribed": False,
+        "trial": False,
+    }
+
+
+User.nested["plan"] = UserPlan
+
+
+class Coordinates(FlumeModel):
+    """Latitude/longitude pair returned on portal location reads."""
+
+    latitude: float
+    longitude: float
+
+    defaults = {"latitude": 0.0, "longitude": 0.0}
+
+
+class LocationFeatures(FlumeModel):
+    """Feature flags returned for a portal location."""
+
+    compatible_meter: bool
+    disaggregation: str
+    free_batteries: str
+    monthly_emails: bool
+    use_profile_for_disag: bool
+
+    defaults = {
+        "compatible_meter": False,
+        "disaggregation": "",
+        "free_batteries": "",
+        "monthly_emails": False,
+        "use_profile_for_disag": False,
+    }
+
+
+class LocationProfile(FlumeModel):
+    """Household fixture/profile values returned with portal locations."""
+
+    residents: int
+    bathrooms: int
+    auto_fill_pool: bool
+    bathtub: bool
+    clothes_washer: bool
+    dish_washer: bool
+    drip_irrigation: bool
+    evaporative_cooler: bool
+    faucet: bool
+    hose_irrigation: bool
+    humidifier: bool
+    ice_maker: bool
+    manual_fill_pool: bool
+    non_wifi_irrigation_controller: bool
+    ro_system: bool
+    shower: bool
+    soaker_hose: bool
+    sprinklers: bool
+    toilet: bool
+    water_softener: bool
+    wifi_irrigation_controller: bool
+
+    defaults = {
+        "residents": 0,
+        "bathrooms": 0,
+        "auto_fill_pool": False,
+        "bathtub": False,
+        "clothes_washer": False,
+        "dish_washer": False,
+        "drip_irrigation": False,
+        "evaporative_cooler": False,
+        "faucet": False,
+        "hose_irrigation": False,
+        "humidifier": False,
+        "ice_maker": False,
+        "manual_fill_pool": False,
+        "non_wifi_irrigation_controller": False,
+        "ro_system": False,
+        "shower": False,
+        "soaker_hose": False,
+        "sprinklers": False,
+        "toilet": False,
+        "water_softener": False,
+        "wifi_irrigation_controller": False,
+    }
 
 
 class Location(FlumeModel):
@@ -204,6 +334,12 @@ class Location(FlumeModel):
     building_type: Optional[str]
     away_mode: bool
     usage_profile: JSONValue
+    coords: Optional[Coordinates]
+    geo: Optional[Coordinates]
+    features: Optional[LocationFeatures]
+    has_irrigation: bool
+    has_pool: bool
+    profile: Optional[LocationProfile]
 
     defaults = {
         "id": None,
@@ -222,6 +358,18 @@ class Location(FlumeModel):
         "building_type": None,
         "away_mode": False,
         "usage_profile": None,
+        "coords": None,
+        "geo": None,
+        "features": None,
+        "has_irrigation": False,
+        "has_pool": False,
+        "profile": None,
+    }
+    nested = {
+        "coords": Coordinates,
+        "geo": Coordinates,
+        "features": LocationFeatures,
+        "profile": LocationProfile,
     }
 
 
@@ -240,8 +388,10 @@ class Device(FlumeModel):
     oriented: bool
     last_seen: str
     connected: bool
-    battery_level: Optional[float]
-    product: JSONValue
+    battery_level: Optional[str]
+    product: Optional[str]
+    supports_ap: bool
+    supports_bluetooth: bool
     user: Optional[User]
     location: Optional[Location]
 
@@ -260,6 +410,8 @@ class Device(FlumeModel):
         "connected": False,
         "battery_level": None,
         "product": None,
+        "supports_ap": False,
+        "supports_bluetooth": False,
         "user": None,
         "location": None,
     }
@@ -272,13 +424,15 @@ class Notification(FlumeModel):
     id: Optional[ResourceId]
     device_id: Optional[ResourceId]
     user_id: Optional[ResourceId]
-    type: Optional[str]
+    type: Optional[int]
     message: str
     created_datetime: Optional[str]
     title: str
     read: bool
-    extra: JSONValue
+    extra: Optional["NotificationExtra"]
     event_rule: JSONValue
+    event_rule_id: Optional[int]
+    event_triggered: bool
 
     defaults = {
         "id": None,
@@ -291,7 +445,51 @@ class Notification(FlumeModel):
         "read": False,
         "extra": None,
         "event_rule": None,
+        "event_rule_id": None,
+        "event_triggered": False,
     }
+
+
+class NotificationQuery(FlumeModel):
+    """Query metadata embedded in notification ``extra`` payloads."""
+
+    bucket: str
+    request_id: str
+    since_datetime: str
+    tz: str
+    until_datetime: str
+
+    defaults = {
+        "bucket": "",
+        "request_id": "",
+        "since_datetime": "",
+        "tz": "",
+        "until_datetime": "",
+    }
+
+
+class NotificationExtra(FlumeModel):
+    """Known fields in the portal notification ``extra`` object."""
+
+    advanced_low_flow: bool
+    budget_start: Optional[str]
+    budget_type: Optional[str]
+    event_rule_name: Optional[str]
+    percentage: Optional[int]
+    query: Optional[NotificationQuery]
+
+    defaults = {
+        "advanced_low_flow": False,
+        "budget_start": None,
+        "budget_type": None,
+        "event_rule_name": None,
+        "percentage": None,
+        "query": None,
+    }
+    nested = {"query": NotificationQuery}
+
+
+Notification.nested["extra"] = NotificationExtra
 
 
 class UsageAlert(FlumeModel):
@@ -336,6 +534,22 @@ class ShutoffConfig(FlumeModel):
     defaults = {"active": False}
 
 
+class UsageAlertSchedule(FlumeModel):
+    """Compact schedule association nested in a usage-alert rule."""
+
+    schedule_id: Optional[ResourceId]
+    active: bool
+    name: str
+    description: str
+
+    defaults = {
+        "schedule_id": None,
+        "active": False,
+        "name": "",
+        "description": "",
+    }
+
+
 class UsageAlertRule(FlumeModel):
     """Portal usage-alert rule, including portal-derived display helpers."""
 
@@ -347,8 +561,9 @@ class UsageAlertRule(FlumeModel):
     duration: int
     notify_every: int
     advanced_low_flow: bool
+    notification_type: Optional[str]
     shutoff_config: Optional[ShutoffConfig]
-    schedules: List["DoNotAlertSchedule"]
+    schedules: List[UsageAlertSchedule]
     expected_usage_config: JSONValue
     descHTML: str
     notifyHTML: str
@@ -362,13 +577,17 @@ class UsageAlertRule(FlumeModel):
         "duration": 0,
         "notify_every": 0,
         "advanced_low_flow": False,
+        "notification_type": None,
         "shutoff_config": None,
         "schedules": [],
         "expected_usage_config": None,
         "descHTML": "",
         "notifyHTML": "",
     }
-    nested = {"shutoff_config": ShutoffConfig}
+    nested = {
+        "shutoff_config": ShutoffConfig,
+        "schedules": UsageAlertSchedule,
+    }
 
     @property
     def duration_hour_min(self) -> Dict[str, int]:
@@ -396,9 +615,12 @@ class Budget(FlumeModel):
     id: Optional[ResourceId]
     name: str
     type: Optional[str]
-    value: float
-    thresholds: List[JSONValue]
+    value: Union[int, float]
+    thresholds: List[int]
     actual: Optional[float]
+    start_date: Optional[str]
+    end_date: Optional[str]
+    recur_multiplier: Optional[int]
 
     defaults = {
         "id": None,
@@ -407,6 +629,9 @@ class Budget(FlumeModel):
         "value": 0.0,
         "thresholds": [],
         "actual": None,
+        "start_date": None,
+        "end_date": None,
+        "recur_multiplier": None,
     }
 
 
@@ -461,11 +686,11 @@ class DoNotAlertSchedule(FlumeModel):
     last_end: str
     next_start: str
     next_end: str
-    span_types: List[JSONValue]
+    span_types: List[str]
     rrule_str: str
-    rrule_obj: JSONDict
+    rrule_obj: "RecurrenceRule"
     created_datetime: str
-    updated_datetime: str
+    updated_datetime: Optional[str]
 
     defaults = {
         "id": None,
@@ -481,19 +706,37 @@ class DoNotAlertSchedule(FlumeModel):
         "next_end": "",
         "span_types": [],
         "rrule_str": "",
-        "rrule_obj": {
-            "tzid": "",
-            "dtstart": "",
-            "freq": "",
-            "interval": 0,
-            "byweekday": [],
-            "byhour": 0,
-            "byminute": 0,
-            "bysecond": 0,
-        },
+        "rrule_obj": None,
         "created_datetime": "",
-        "updated_datetime": "",
+        "updated_datetime": None,
     }
+
+
+class RecurrenceRule(FlumeModel):
+    """Recurrence fields returned in a Do Not Alert schedule."""
+
+    tzid: str
+    dtstart: str
+    freq: str
+    interval: int
+    byweekday: List[str]
+    byhour: int
+    byminute: int
+    bysecond: int
+
+    defaults = {
+        "tzid": "",
+        "dtstart": "",
+        "freq": "",
+        "interval": 0,
+        "byweekday": [],
+        "byhour": 0,
+        "byminute": 0,
+        "bysecond": 0,
+    }
+
+
+DoNotAlertSchedule.nested["rrule_obj"] = RecurrenceRule
 
 
 class LocationAccess(FlumeModel):
@@ -530,33 +773,69 @@ class Integration(FlumeModel):
     }
 
 
-class Span(FlumeModel):
-    """Water-usage span/appliance classification."""
+class SpanDataPoint(FlumeModel):
+    """One time/value sample inside a portal water-usage span."""
 
-    id: Optional[ResourceId]
-    device_id: Optional[ResourceId]
-    type: Optional[str]
-    start_datetime: Optional[str]
-    end_datetime: Optional[str]
+    datetime: str
+    value: Union[int, float]
 
     defaults = {
-        "id": None,
-        "device_id": None,
-        "type": None,
-        "start_datetime": None,
-        "end_datetime": None,
+        "datetime": "",
+        "value": 0.0,
     }
+
+
+class Span(FlumeModel):
+    """Water-usage span returned by the customer portal."""
+
+    id: str
+    type: str
+    start: str
+    end: str
+    data: List[SpanDataPoint]
+    is_editable: bool
+    max_flowrate: float
+    mode_gpm: float
+    origin: str
+    total: float
+    value: float
+    version: str
+
+    defaults = {
+        "id": "",
+        "type": "",
+        "start": "",
+        "end": "",
+        "data": [],
+        "is_editable": False,
+        "max_flowrate": 0.0,
+        "mode_gpm": 0.0,
+        "origin": "",
+        "total": 0.0,
+        "value": 0.0,
+        "version": "",
+    }
+
+
+Span.nested["data"] = SpanDataPoint
 
 
 class SpanType(FlumeModel):
     """Available span classification metadata."""
 
-    id: Optional[ResourceId]
-    name: Optional[str]
-    type: Optional[str]
-    display: JSONValue
+    name: str
+    display_name: str
+    labeled_as: str
+    can_relabel: bool
+    can_view: bool
 
-    defaults = {"id": None, "name": None, "type": None, "display": None}
+    defaults = {
+        "name": "",
+        "display_name": "",
+        "labeled_as": "",
+        "can_relabel": False,
+        "can_view": False,
+    }
 
 
 class Leak(FlumeModel):
@@ -566,12 +845,16 @@ class Leak(FlumeModel):
     device_id: Optional[ResourceId]
     active: bool
     created_datetime: Optional[str]
+    expected_usage_config_enabled: bool
+    suppressed: bool
 
     defaults = {
         "id": None,
         "device_id": None,
         "active": False,
         "created_datetime": None,
+        "expected_usage_config_enabled": False,
+        "suppressed": False,
     }
 
 
@@ -581,7 +864,7 @@ class PurchaseOption(FlumeModel):
     id: Optional[ResourceId]
     type: Optional[str]
     link: Optional[str]
-    price: JSONValue
+    price: Optional[str]
 
     defaults = {
         "id": None,
@@ -603,7 +886,12 @@ class Contact(FlumeModel):
 
 
 class Insurer(FlumeModel):
-    """Undocumented insurer metadata; all returned fields remain accessible."""
+    """Insurer metadata returned by the root insurer list."""
+
+    id: Optional[ResourceId]
+    name: str
+
+    defaults = {"id": None, "name": ""}
 
 
 class ApiClient(FlumeModel):
@@ -613,10 +901,21 @@ class ApiClient(FlumeModel):
 class ProService(FlumeModel):
     """Local professional service listing displayed by the portal."""
 
-    name: Optional[str]
-    url: Optional[str]
+    id: Optional[ResourceId]
+    name: str
+    description: str
+    discount: int
+    provider: str
+    url: str
 
-    defaults = {"name": None, "url": None}
+    defaults = {
+        "id": None,
+        "name": "",
+        "description": "",
+        "discount": 0,
+        "provider": "",
+        "url": "",
+    }
 
 
 class AccuracyResult(FlumeModel):
@@ -675,7 +974,3 @@ def modelize(value: Any, model: Optional[Type[ModelT]]) -> Any:
     if isinstance(value, Mapping):
         return model(value)
     return value
-
-
-# The portal constructs schedules as concrete models nested on usage rules.
-UsageAlertRule.nested["schedules"] = DoNotAlertSchedule

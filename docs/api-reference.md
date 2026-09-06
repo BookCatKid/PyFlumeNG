@@ -59,24 +59,24 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `get_user() -> Optional[User]`
 - `list_devices(**params: JSONValue) -> List[Device]`
 - `list_portal_devices(**params: JSONValue) -> List[Device]`
-  List devices through the portal's root device route.
+  List devices using the user-scoped route with portal auth data.
 - `get_device(device_id: ResourceId, **params: JSONValue) -> Optional[Device]`
 - `get_portal_device(device_id: ResourceId, **params: JSONValue) -> Optional[Device]`
-  Fetch one device through the portal's root device route.
+  Fetch one device using the user-scoped route with portal auth data.
 - `query(device_id: ResourceId, payload: JSONDict) -> List[QueryResult]`
 - `portal_query(device_id: ResourceId, payload: JSONDict) -> List[QueryResult]`
-  Submit a query through the portal's root device route.
+  Run the read-only device query using the user-scoped route.
 - `get_current_flow(device_id: ResourceId) -> Optional[CurrentFlow]`
 - `get_portal_current_flow(device_id: ResourceId) -> Optional[CurrentFlow]`
-  Read current flow through the portal's root device route.
+  Read current flow using the user-scoped route with portal auth.
 - `list_locations(**params: JSONValue) -> List[Location]`
 - `list_portal_locations(**params: JSONValue) -> List[Location]`
-  List locations through the portal's root location route.
+  List locations using the user-scoped route with portal auth data.
 - `get_location_profiles() -> Optional[LocationProfiles]`
   Fetch the portal's appliance/profile metadata.
 - `get_location(location_id: ResourceId) -> Optional[Location]`
 - `get_portal_location(location_id: ResourceId) -> Optional[Location]`
-  Fetch one location through the portal's root location route.
+  Fetch one location using the user-scoped route with portal auth data.
 - `create_location(payload: JSONDict) -> JSONValue`
 - `create_portal_location(payload: JSONDict) -> JSONValue`
   Create a location through the portal's root location route.
@@ -90,10 +90,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `update_email(payload: JSONDict) -> JSONValue`
 - `list_notifications(**params: JSONValue) -> List[Notification]`
 - `list_portal_notifications(**params: JSONValue) -> List[Notification]`
-  List notifications through the portal's root notification route.
+  List notifications using the user-scoped route with portal auth data.
 - `get_notification(notification_id: ResourceId) -> Optional[Notification]`
 - `get_portal_notification(notification_id: ResourceId) -> Optional[Notification]`
-  Fetch one notification through the portal's root route.
+  Fetch one notification using the user-scoped route with portal auth.
 - `update_notification(notification_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_portal_notification(notification_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a notification through the portal's root route.
@@ -106,10 +106,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `list_event_rules(device_id: ResourceId, **params: JSONValue) -> List[UsageAlertRule]`
 - `list_usage_alert_rules(device_id: ResourceId, **params: JSONValue) -> List[UsageAlertRule]`
 - `list_portal_usage_alert_rules(device_id: ResourceId, **params: JSONValue) -> List[UsageAlertRule]`
-  List rules through the portal's root device route.
+  List usage rules using the user-scoped route with portal auth data.
 - `get_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId) -> Optional[UsageAlertRule]`
 - `get_portal_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId) -> Optional[UsageAlertRule]`
-  Fetch one rule through the portal's root device route.
+  Fetch one usage rule using the user-scoped route with portal auth.
 - `create_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `create_portal_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a rule through the portal's root device route.
@@ -130,10 +130,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Read one active leak through the portal's user-scoped route.
 - `list_budgets(device_id: ResourceId, **params: JSONValue) -> List[Budget]`
 - `list_portal_budgets(device_id: ResourceId, **params: JSONValue) -> List[Budget]`
-  List budgets through the portal's root device route.
+  List budgets using the user-scoped route with portal auth data.
 - `get_budget(device_id: ResourceId, budget_id: ResourceId) -> Optional[Budget]`
 - `get_portal_budget(device_id: ResourceId, budget_id: ResourceId) -> Optional[Budget]`
-  Fetch one budget using the portal service's collection GET form.
+  Fetch one budget using the user-scoped route with portal auth.
 - `create_budget(device_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `create_portal_budget(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a budget through the portal's root device route.
@@ -145,10 +145,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Delete a budget using the portal service's collection route.
 - `list_subscriptions(**params: JSONValue) -> List[Subscription]`
 - `list_portal_subscriptions(**params: JSONValue) -> List[Subscription]`
-  List subscriptions through the portal's root route.
+  List subscriptions using the user-scoped route with portal auth data.
 - `get_subscription(subscription_id: ResourceId) -> Optional[Subscription]`
 - `get_portal_subscription(subscription_id: ResourceId) -> Optional[Subscription]`
-  Fetch a subscription through the portal's collection GET form.
+  Fetch a subscription using the user-scoped route with portal auth.
 - `create_location_subscription(location_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `create_portal_subscription(location_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a subscription through the portal's root location route.
@@ -178,10 +178,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `update_rule_shutoff_config(device_id: ResourceId, rule_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `list_location_access(location_id: ResourceId, **params: JSONValue) -> List[LocationAccess]`
 - `list_portal_location_access(location_id: ResourceId, **params: JSONValue) -> List[LocationAccess]`
-  List sharing records through the portal's root location route.
+  List sharing records using the user-scoped route with portal auth.
 - `get_location_access(location_id: ResourceId, access_id: ResourceId) -> Optional[LocationAccess]`
 - `get_portal_location_access(location_id: ResourceId, access_id: ResourceId) -> Optional[LocationAccess]`
-  Fetch sharing records through the portal collection GET form.
+  Fetch a sharing record using the user-scoped route with portal auth.
 - `grant_location_access(location_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `grant_portal_location_access(location_id: ResourceId, payload: JSONDict) -> JSONValue`
   Grant sharing access through the portal's root location route.
@@ -202,7 +202,8 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Unlink an integration using the portal's collection DELETE form.
 - `list_shutoff_integrations(device_id: ResourceId) -> List[Integration]`
   List portal shutoff-valve integrations.
-- `list_spans(device_id: ResourceId, **params: JSONValue) -> List[Span]`
+- `list_spans(device_id: ResourceId, since_datetime: str, until_datetime: str, units: str = 'gallons', span_types: Optional[Sequence[str]] = None) -> List[Span]`
+  List portal usage spans for a time range and classification set.
 - `update_span(device_id: ResourceId, span_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_span_type(device_id: ResourceId, span_id: ResourceId, span_type: str) -> JSONValue`
   Set a span's type using the portal's exact payload shape.
@@ -341,6 +342,75 @@ Portal user resource.
 | `phone` | `Optional[str]` |
 | `status` | `Optional[str]` |
 | `signup_datetime` | `Optional[str]` |
+| `invalidate_datetime` | `Optional[str]` |
+| `plan` | `Optional['UserPlan']` |
+| `referral_link` | `Optional[str]` |
+
+### `UserPlan`
+
+Subscription/entitlement details returned with portal user reads.
+
+| Field | Type |
+| --- | --- |
+| `entitlement` | `str` |
+| `expire_datetime` | `Optional[str]` |
+| `frequency` | `Optional[str]` |
+| `one_time_purchase` | `bool` |
+| `origin` | `str` |
+| `prev_origin` | `Optional[str]` |
+| `price` | `Optional[Union[int, float, str]]` |
+| `renews` | `bool` |
+| `subscribed` | `bool` |
+| `trial` | `bool` |
+
+### `Coordinates`
+
+Latitude/longitude pair returned on portal location reads.
+
+| Field | Type |
+| --- | --- |
+| `latitude` | `float` |
+| `longitude` | `float` |
+
+### `LocationFeatures`
+
+Feature flags returned for a portal location.
+
+| Field | Type |
+| --- | --- |
+| `compatible_meter` | `bool` |
+| `disaggregation` | `str` |
+| `free_batteries` | `str` |
+| `monthly_emails` | `bool` |
+| `use_profile_for_disag` | `bool` |
+
+### `LocationProfile`
+
+Household fixture/profile values returned with portal locations.
+
+| Field | Type |
+| --- | --- |
+| `residents` | `int` |
+| `bathrooms` | `int` |
+| `auto_fill_pool` | `bool` |
+| `bathtub` | `bool` |
+| `clothes_washer` | `bool` |
+| `dish_washer` | `bool` |
+| `drip_irrigation` | `bool` |
+| `evaporative_cooler` | `bool` |
+| `faucet` | `bool` |
+| `hose_irrigation` | `bool` |
+| `humidifier` | `bool` |
+| `ice_maker` | `bool` |
+| `manual_fill_pool` | `bool` |
+| `non_wifi_irrigation_controller` | `bool` |
+| `ro_system` | `bool` |
+| `shower` | `bool` |
+| `soaker_hose` | `bool` |
+| `sprinklers` | `bool` |
+| `toilet` | `bool` |
+| `water_softener` | `bool` |
+| `wifi_irrigation_controller` | `bool` |
 
 ### `Location`
 
@@ -364,6 +434,12 @@ Flume location/home resource.
 | `building_type` | `Optional[str]` |
 | `away_mode` | `bool` |
 | `usage_profile` | `JSONValue` |
+| `coords` | `Optional[Coordinates]` |
+| `geo` | `Optional[Coordinates]` |
+| `features` | `Optional[LocationFeatures]` |
+| `has_irrigation` | `bool` |
+| `has_pool` | `bool` |
+| `profile` | `Optional[LocationProfile]` |
 
 ### `Device`
 
@@ -383,8 +459,10 @@ Flume bridge or water-sensor device.
 | `oriented` | `bool` |
 | `last_seen` | `str` |
 | `connected` | `bool` |
-| `battery_level` | `Optional[float]` |
-| `product` | `JSONValue` |
+| `battery_level` | `Optional[str]` |
+| `product` | `Optional[str]` |
+| `supports_ap` | `bool` |
+| `supports_bluetooth` | `bool` |
 | `user` | `Optional[User]` |
 | `location` | `Optional[Location]` |
 
@@ -397,13 +475,40 @@ Portal notification resource.
 | `id` | `Optional[ResourceId]` |
 | `device_id` | `Optional[ResourceId]` |
 | `user_id` | `Optional[ResourceId]` |
-| `type` | `Optional[str]` |
+| `type` | `Optional[int]` |
 | `message` | `str` |
 | `created_datetime` | `Optional[str]` |
 | `title` | `str` |
 | `read` | `bool` |
-| `extra` | `JSONValue` |
+| `extra` | `Optional['NotificationExtra']` |
 | `event_rule` | `JSONValue` |
+| `event_rule_id` | `Optional[int]` |
+| `event_triggered` | `bool` |
+
+### `NotificationQuery`
+
+Query metadata embedded in notification ``extra`` payloads.
+
+| Field | Type |
+| --- | --- |
+| `bucket` | `str` |
+| `request_id` | `str` |
+| `since_datetime` | `str` |
+| `tz` | `str` |
+| `until_datetime` | `str` |
+
+### `NotificationExtra`
+
+Known fields in the portal notification ``extra`` object.
+
+| Field | Type |
+| --- | --- |
+| `advanced_low_flow` | `bool` |
+| `budget_start` | `Optional[str]` |
+| `budget_type` | `Optional[str]` |
+| `event_rule_name` | `Optional[str]` |
+| `percentage` | `Optional[int]` |
+| `query` | `Optional[NotificationQuery]` |
 
 ### `UsageAlert`
 
@@ -442,6 +547,17 @@ Usage-alert shutoff configuration.
 | --- | --- |
 | `active` | `bool` |
 
+### `UsageAlertSchedule`
+
+Compact schedule association nested in a usage-alert rule.
+
+| Field | Type |
+| --- | --- |
+| `schedule_id` | `Optional[ResourceId]` |
+| `active` | `bool` |
+| `name` | `str` |
+| `description` | `str` |
+
 ### `UsageAlertRule`
 
 Portal usage-alert rule, including portal-derived display helpers.
@@ -456,8 +572,9 @@ Portal usage-alert rule, including portal-derived display helpers.
 | `duration` | `int` |
 | `notify_every` | `int` |
 | `advanced_low_flow` | `bool` |
+| `notification_type` | `Optional[str]` |
 | `shutoff_config` | `Optional[ShutoffConfig]` |
-| `schedules` | `List['DoNotAlertSchedule']` |
+| `schedules` | `List[UsageAlertSchedule]` |
 | `expected_usage_config` | `JSONValue` |
 | `descHTML` | `str` |
 | `notifyHTML` | `str` |
@@ -471,9 +588,12 @@ Daily, weekly, or monthly water budget.
 | `id` | `Optional[ResourceId]` |
 | `name` | `str` |
 | `type` | `Optional[str]` |
-| `value` | `float` |
-| `thresholds` | `List[JSONValue]` |
+| `value` | `Union[int, float]` |
+| `thresholds` | `List[int]` |
 | `actual` | `Optional[float]` |
+| `start_date` | `Optional[str]` |
+| `end_date` | `Optional[str]` |
+| `recur_multiplier` | `Optional[int]` |
 
 ### `Subscription`
 
@@ -509,11 +629,26 @@ Portal Do Not Alert schedule.
 | `last_end` | `str` |
 | `next_start` | `str` |
 | `next_end` | `str` |
-| `span_types` | `List[JSONValue]` |
+| `span_types` | `List[str]` |
 | `rrule_str` | `str` |
-| `rrule_obj` | `JSONDict` |
+| `rrule_obj` | `'RecurrenceRule'` |
 | `created_datetime` | `str` |
-| `updated_datetime` | `str` |
+| `updated_datetime` | `Optional[str]` |
+
+### `RecurrenceRule`
+
+Recurrence fields returned in a Do Not Alert schedule.
+
+| Field | Type |
+| --- | --- |
+| `tzid` | `str` |
+| `dtstart` | `str` |
+| `freq` | `str` |
+| `interval` | `int` |
+| `byweekday` | `List[str]` |
+| `byhour` | `int` |
+| `byminute` | `int` |
+| `bysecond` | `int` |
 
 ### `LocationAccess`
 
@@ -538,17 +673,33 @@ External device integration, including shutoff valves.
 | `status` | `JSONValue` |
 | `device_id` | `Optional[ResourceId]` |
 
-### `Span`
+### `SpanDataPoint`
 
-Water-usage span/appliance classification.
+One time/value sample inside a portal water-usage span.
 
 | Field | Type |
 | --- | --- |
-| `id` | `Optional[ResourceId]` |
-| `device_id` | `Optional[ResourceId]` |
-| `type` | `Optional[str]` |
-| `start_datetime` | `Optional[str]` |
-| `end_datetime` | `Optional[str]` |
+| `datetime` | `str` |
+| `value` | `Union[int, float]` |
+
+### `Span`
+
+Water-usage span returned by the customer portal.
+
+| Field | Type |
+| --- | --- |
+| `id` | `str` |
+| `type` | `str` |
+| `start` | `str` |
+| `end` | `str` |
+| `data` | `List[SpanDataPoint]` |
+| `is_editable` | `bool` |
+| `max_flowrate` | `float` |
+| `mode_gpm` | `float` |
+| `origin` | `str` |
+| `total` | `float` |
+| `value` | `float` |
+| `version` | `str` |
 
 ### `SpanType`
 
@@ -556,10 +707,11 @@ Available span classification metadata.
 
 | Field | Type |
 | --- | --- |
-| `id` | `Optional[ResourceId]` |
-| `name` | `Optional[str]` |
-| `type` | `Optional[str]` |
-| `display` | `JSONValue` |
+| `name` | `str` |
+| `display_name` | `str` |
+| `labeled_as` | `str` |
+| `can_relabel` | `bool` |
+| `can_view` | `bool` |
 
 ### `Leak`
 
@@ -571,6 +723,8 @@ Leak status or leak event.
 | `device_id` | `Optional[ResourceId]` |
 | `active` | `bool` |
 | `created_datetime` | `Optional[str]` |
+| `expected_usage_config_enabled` | `bool` |
+| `suppressed` | `bool` |
 
 ### `PurchaseOption`
 
@@ -581,7 +735,7 @@ Device purchase option exposed by the customer portal.
 | `id` | `Optional[ResourceId]` |
 | `type` | `Optional[str]` |
 | `link` | `Optional[str]` |
-| `price` | `JSONValue` |
+| `price` | `Optional[str]` |
 
 ### `Contact`
 
@@ -596,9 +750,12 @@ Flume support contact information.
 
 ### `Insurer`
 
-Undocumented insurer metadata; all returned fields remain accessible.
+Insurer metadata returned by the root insurer list.
 
-Flume does not publish a stable field schema for this resource. The model intentionally remains open and preserves every key returned by the API.
+| Field | Type |
+| --- | --- |
+| `id` | `Optional[ResourceId]` |
+| `name` | `str` |
 
 ### `ApiClient`
 
@@ -612,8 +769,12 @@ Local professional service listing displayed by the portal.
 
 | Field | Type |
 | --- | --- |
-| `name` | `Optional[str]` |
-| `url` | `Optional[str]` |
+| `id` | `Optional[ResourceId]` |
+| `name` | `str` |
+| `description` | `str` |
+| `discount` | `int` |
+| `provider` | `str` |
+| `url` | `str` |
 
 ### `AccuracyResult`
 

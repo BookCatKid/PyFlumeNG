@@ -55,19 +55,16 @@ client = pyflume.FlumeClient(auth)  # auth may be PersonalAuth or PortalAuth
 notifications = client.list_notifications(read=False)
 ```
 
-There are also two route families:
+`list_notifications()` and `get_notification()` use the user-scoped routes and
+work with either auth mode. `list_portal_notifications()` and
+`get_portal_notification()` delegate to those same reads; live testing found
+that the guessed root `/notifications` read is not a valid portal route.
 
-- `list_notifications()` and `get_notification()` use the user-scoped routes;
-- `list_portal_notifications()` and `get_portal_notification()` use the root
-  routes used by Flume's customer portal.
-
-The unprefixed read methods are not PersonalAuth-only. Portal auth can use the
-ordinary user-scoped notification reads as well.
-
-Notification mutation helpers are separate. Portal-root update/delete methods
+Notification mutation helpers are separate. Methods marked as portal writes
 require `PortalAuth` because `FlumeClient` checks for the `portal_writes`
-capability. `set_notification_read(..., portal=True)` uses that portal write
-path by default; pass `portal=False` to use the user-scoped update route.
+capability. These write routes have not been live-mutated as part of the
+read-only validation, so the generated reference documents their current
+implementation without claiming they were write-tested.
 
 All exact signatures and return types are generated in the
 [API reference](api-reference.md).

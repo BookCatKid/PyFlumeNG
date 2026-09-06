@@ -48,7 +48,8 @@ data = pyflume.FlumeData(
 immediately. `query_payload` is a typed `QueryPayload`, and `values` is a
 `QueryValues` mapping from request IDs to numeric values or `None`.
 
-For arbitrary queries, current flow, and portal root-device query routes, use
-the typed `FlumeClient.query()`, `portal_query()`, `get_current_flow()`, and
-`get_portal_current_flow()` methods documented in the
-[API reference](api-reference.md).
+For arbitrary queries and current flow, use the typed `FlumeClient.query()` and
+`get_current_flow()` methods documented in the [API reference](api-reference.md).
+The `portal_query()` and `get_portal_current_flow()` convenience methods now
+delegate to those same working user-scoped routes; live testing found that the
+guessed root-device query routes are not valid portal reads.

@@ -56,6 +56,10 @@ request is sent.
 `FlumeClient` exposes the broader portal surface: event rules, usage-alert rule
 CRUD, do-not-alert schedules, rule/schedule association, and shutoff
 configuration. `UsageAlertRule.schedules` is modeled as
-`list[DoNotAlertSchedule]` and serializes back through `to_dict()`.
+`list[UsageAlertSchedule]` and serializes back through `to_dict()`. The nested
+schedule association returned on a rule is a compact object with
+`schedule_id`, `active`, `name`, and `description`; it is different from the
+full `DoNotAlertSchedule` resource returned by the do-not-alert schedule
+endpoint.
 
 See the [API reference](api-reference.md) for every method and return type.
