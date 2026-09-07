@@ -486,8 +486,7 @@ class FlumeClient:
             (
                 notification
                 for notification in self.list_notifications()
-                if notification.id is not None
-                and str(notification.id) == normalized_id
+                if notification.id is not None and str(notification.id) == normalized_id
             ),
             None,
         )
@@ -588,11 +587,16 @@ class FlumeClient:
         query = item.extra.query
         result = self.query(item.device_id, payload)
         raw_values = result[0].get("notification_detail", []) if result else []
-        values = [
-            float(value["value"])
-            for value in raw_values
-            if isinstance(value, dict) and isinstance(value.get("value"), (int, float))
-        ] if isinstance(raw_values, list) else []
+        values = (
+            [
+                float(value["value"])
+                for value in raw_values
+                if isinstance(value, dict)
+                and isinstance(value.get("value"), (int, float))
+            ]
+            if isinstance(raw_values, list)
+            else []
+        )
         average_gpm = (sum(values) / len(values)) if values else None
         return NotificationUsageDetail(
             notification_id=item.id,
@@ -682,7 +686,7 @@ class FlumeClient:
         flow_rate: float,
         duration: int,
         *,
-        notify_every: int = 0,
+        notify_every: Optional[int] = None,
         active: bool = True,
         shutoff_active: Optional[bool] = None,
         advanced_low_flow: bool = False,
@@ -705,7 +709,7 @@ class FlumeClient:
         flow_rate: float,
         duration: int,
         *,
-        notify_every: int = 0,
+        notify_every: Optional[int] = None,
         active: bool = True,
         shutoff_active: Optional[bool] = None,
     ) -> JSONValue:
@@ -767,7 +771,7 @@ class FlumeClient:
         flow_rate: float,
         duration: int,
         *,
-        notify_every: int = 0,
+        notify_every: Optional[int] = None,
         active: bool = True,
         shutoff_active: Optional[bool] = None,
     ) -> JSONValue:
@@ -1042,7 +1046,9 @@ class FlumeClient:
     def list_subscriptions(self, **params: JSONValue) -> List[Subscription]:
         return self.list_all(self._user_path("/subscriptions"), params, Subscription)
 
-    def list_notification_subscriptions(self, **params: JSONValue) -> List[Subscription]:
+    def list_notification_subscriptions(
+        self, **params: JSONValue
+    ) -> List[Subscription]:
         """List ordinary (non-emergency) notification subscriptions."""
         return [
             subscription

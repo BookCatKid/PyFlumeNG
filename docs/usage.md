@@ -92,7 +92,18 @@ are parseable.
 For custom rules, `build_usage_alert_rule_payload()` and the configured
 create/update helpers enforce the current portal form: a 1–32 character name,
 flow rate from 0 through 40.9 gallons/minute, duration from 5 through 1439
-minutes, and repeat notification interval from 0 through 20100 minutes.
+minutes, and repeat notification interval no greater than 20100 minutes. Live
+API validation adds one rule the portal form itself does not make obvious:
+`notify_every` must be at least **twice the rule duration**. For example,
+`duration=60` accepts `notify_every=120` but rejects `119`; the maximum tested
+duration `1439` accepts `2878` but rejects `2877`. Violating this live backend
+constraint produces HTTP 400 / API code 94 rather than a useful field-level
+validation message.
+
+If `notify_every` is omitted for a custom rule, PyFlumeNG now chooses the safe
+minimum automatically: `2 * duration`. Passing an explicit smaller value raises
+`ValueError` before any request is sent. This avoids the previous default of
+zero, which the backend rejects for ordinary custom-rule creation.
 
 The built-in Smart Leak rule is deliberately different. The portal does not
 send `name`, `flow_rate`, or `shutoff_config` when editing an

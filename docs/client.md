@@ -167,6 +167,12 @@ emergency contacts, shared access, span relabel/update, Do Not Alert and usage
 rule writes, and meter-accuracy submissions. Reads remain usable with either
 auth mode where the server permits them.
 
+Configured custom usage-alert helpers also enforce the live backend's
+cross-field repeat constraint: `notify_every >= 2 * duration`. Omitting
+`notify_every` selects exactly `2 * duration`, while explicit smaller values are
+rejected locally. The separately audited field limits remain 40.9 GPM maximum
+flow and 1439 minutes maximum duration.
+
 For writes where the portal's broader token is known to be required,
 `FlumeClient` checks the auth capability before making the request. Examples
 include portal usage-alert rule writes and portal notification/location/account

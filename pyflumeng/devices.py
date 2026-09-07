@@ -51,7 +51,9 @@ class FlumeDeviceList:
 
         """
 
-        url = api_url(self._flume_auth, "/users/{0}/devices".format(self._flume_auth.user_id))
+        url = api_url(
+            self._flume_auth, "/users/{0}/devices".format(self._flume_auth.user_id)
+        )
         query_string = {"user": "true", "location": "true"}
 
         response = self._http_session.request(

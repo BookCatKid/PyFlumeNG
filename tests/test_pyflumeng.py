@@ -1276,6 +1276,59 @@ def test_usage_rule_payload_builder_validates_portal_limits_and_smart_leak_field
         FlumeClient.build_usage_alert_rule_payload("Rule", 1, 4)
 
 
+def test_usage_rule_payload_builder_enforces_live_repeat_interval_constraint():
+    """Custom rules require repeat notifications at least twice the duration."""
+    defaulted = FlumeClient.build_usage_alert_rule_payload("Rule", 5, 15)
+    assert defaulted["notify_every"] == 30
+
+    boundary = FlumeClient.build_usage_alert_rule_payload(
+        "Boundary",
+        40.9,
+        1439,
+        notify_every=2878,
+        active=False,
+    )
+    assert boundary["flow_rate"] == 40.9
+    assert boundary["duration"] == 1439
+    assert boundary["notify_every"] == 2878
+    assert boundary["active"] is False
+
+    with pytest.raises(ValueError, match="twice duration"):
+        FlumeClient.build_usage_alert_rule_payload("Rule", 5, 15, notify_every=0)
+    with pytest.raises(ValueError, match="twice duration"):
+        FlumeClient.build_usage_alert_rule_payload("Rule", 5, 15, notify_every=29)
+    with pytest.raises(ValueError, match="twice duration"):
+        FlumeClient.build_usage_alert_rule_payload(
+            "Boundary", 40.9, 1439, notify_every=2877
+        )
+
+
+def test_configured_usage_rule_create_uses_safe_dynamic_repeat_default(requests_mock):
+    """Configured create must not send the backend-invalid historical zero default."""
+    url = PORTAL_API_URL + "/users/12345/devices/device/rules/usage-alerts"
+    requests_mock.post(url, json={"success": True, "data": [{"id": "temp"}]})
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    client.create_usage_alert_rule_configured(
+        "device",
+        "Temporary Rule",
+        5,
+        15,
+        active=False,
+    )
+
+    assert requests_mock.last_request.json() == {
+        "active": False,
+        "duration": 15,
+        "notify_every": 30,
+        "advanced_low_flow": False,
+        "name": "Temporary Rule",
+        "flow_rate": 5.0,
+    }
+
+
 def test_do_not_alert_builder_matches_weekly_portal_model_and_omits_empty_spans():
     """DNA builder validates times/days and reproduces the portal schedule model."""
     payload = FlumeClient.build_do_not_alert_schedule_payload(

@@ -211,9 +211,7 @@ class FlumeAuth:  # noqa: WPS214
         token_expiration = datetime.fromtimestamp(
             self._decoded_token["exp"], tz=timezone.utc
         )
-        time_difference = datetime.now(timezone.utc) + timedelta(
-            hours=12
-        )  # noqa: WPS432
+        time_difference = datetime.now(timezone.utc) + timedelta(hours=12)  # noqa: WPS432
         LOGGER.debug("Token expiration time: %s", token_expiration)  # noqa: WPS323
         LOGGER.debug("Token comparison time: %s", time_difference)  # noqa: WPS323
 

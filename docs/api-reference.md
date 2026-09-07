@@ -120,16 +120,16 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `get_portal_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId) -> Optional[UsageAlertRule]`
   Fetch one usage rule using the user-scoped route with portal auth.
 - `create_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
-- `build_usage_alert_rule_payload(name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None, advanced_low_flow: bool = False) -> JSONDict`
+- `build_usage_alert_rule_payload(name: str, flow_rate: float, duration: int, *, notify_every: Optional[int] = None, active: bool = True, shutoff_active: Optional[bool] = None, advanced_low_flow: bool = False) -> JSONDict`
   Validate and build the customer portal's usage-alert rule payload.
-- `create_usage_alert_rule_configured(device_id: ResourceId, name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None) -> JSONValue`
+- `create_usage_alert_rule_configured(device_id: ResourceId, name: str, flow_rate: float, duration: int, *, notify_every: Optional[int] = None, active: bool = True, shutoff_active: Optional[bool] = None) -> JSONValue`
   Create a validated custom rule without requiring callers to shape JSON.
 - `build_smart_leak_rule_payload(duration: int, *, notify_every: int = 0, active: bool = True) -> JSONDict`
   Build the restricted edit payload used for Flume's Smart Leak rule.
 - `create_portal_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a rule through the portal's user-scoped device route.
 - `update_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId, payload: JSONDict) -> JSONValue`
-- `update_usage_alert_rule_configured(device_id: ResourceId, rule_id: ResourceId, name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None) -> JSONValue`
+- `update_usage_alert_rule_configured(device_id: ResourceId, rule_id: ResourceId, name: str, flow_rate: float, duration: int, *, notify_every: Optional[int] = None, active: bool = True, shutoff_active: Optional[bool] = None) -> JSONValue`
   Update a validated custom rule using the portal's editable fields.
 - `update_smart_leak_rule_configured(device_id: ResourceId, rule_id: ResourceId, duration: int, *, notify_every: int = 0, active: bool = True) -> JSONValue`
   Update Smart Leak without sending fields the portal intentionally omits.
@@ -412,7 +412,7 @@ Budget recurrence types exposed by the customer portal.
   Return subscription bits not named by the current portal bundle.
 - `set_notification_preference_bit(mask: int, preference: NotificationPreference, enabled: bool) -> int`
   Toggle one known preference while preserving every unrelated/unknown bit.
-- `build_usage_alert_rule_payload(name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None, advanced_low_flow: bool = False) -> JSONDict`
+- `build_usage_alert_rule_payload(name: str, flow_rate: float, duration: int, *, notify_every: Optional[int] = None, active: bool = True, shutoff_active: Optional[bool] = None, advanced_low_flow: bool = False) -> JSONDict`
   Build a portal-valid usage-alert rule payload.
 - `build_smart_leak_rule_payload(duration: int, *, notify_every: int = 0, active: bool = True) -> JSONDict`
   Build only the fields the portal edits on its built-in Smart Leak rule.

@@ -89,6 +89,10 @@ without dropping unknown bits, structured usage-alert history, AVG notification
 detail, validated usage-rule/Smart-Leak and Do Not Alert payloads, and
 percentage-based budget configuration.
 
+Custom usage-alert validation includes the live API rule that repeat
+notifications must be at least twice the alert duration. If callers omit
+`notify_every`, PyFlumeNG uses the safe minimum `2 * duration` automatically.
+
 `pyflumeng` ships a `py.typed` marker so installed type checkers can consume the
 package annotations. The complete method signatures and model fields are in the
 [generated API reference](docs/api-reference.md).

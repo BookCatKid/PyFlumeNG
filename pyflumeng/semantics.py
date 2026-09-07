@@ -77,7 +77,7 @@ def build_usage_alert_rule_payload(
     flow_rate: float,
     duration: int,
     *,
-    notify_every: int = 0,
+    notify_every: Optional[int] = None,
     active: bool = True,
     shutoff_active: Optional[bool] = None,
     advanced_low_flow: bool = False,
@@ -85,19 +85,28 @@ def build_usage_alert_rule_payload(
     """Build a portal-valid usage-alert rule payload.
 
     ``duration`` and ``notify_every`` are minutes. The frontend's custom-rule
-    form limits duration to 23h59m and repeat notifications to 13d23h. For the
+    form limits duration to 23h59m and repeat notifications to 13d23h. The live
+    API additionally requires a custom rule's repeat interval to be at least
+    twice its duration. When omitted, ``notify_every`` therefore defaults to
+    exactly ``2 * duration`` instead of the backend-invalid value zero. For the
     built-in Smart Leak rule (``advanced_low_flow=True``), the portal omits
     name, flow-rate, and shutoff fields when editing it.
     """
     if duration < 5 or duration > (23 * 60 + 59):
         raise ValueError("duration must be between 5 and 1439 minutes")
-    if notify_every < 0 or notify_every > (13 * 24 * 60 + 23 * 60):
+    if notify_every is None:
+        effective_notify_every = 0 if advanced_low_flow else 2 * duration
+    else:
+        effective_notify_every = int(notify_every)
+    if effective_notify_every < 0 or effective_notify_every > (13 * 24 * 60 + 23 * 60):
         raise ValueError("notify_every must be between 0 and 20100 minutes")
+    if not advanced_low_flow and effective_notify_every < 2 * duration:
+        raise ValueError("notify_every must be at least twice duration")
 
     payload: JSONDict = {
         "active": bool(active),
         "duration": int(duration),
-        "notify_every": int(notify_every),
+        "notify_every": effective_notify_every,
         "advanced_low_flow": bool(advanced_low_flow),
     }
     if advanced_low_flow:
