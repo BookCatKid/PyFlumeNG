@@ -1310,11 +1310,12 @@ class FlumeClient:
             classifications = self.list_span_types(location_id)
             for classification in classifications:
                 name = classification.name.upper()
-                display_names[name] = (
-                    classification.display_name
-                    or classification.labeled_as
-                    or self._span_display_name(name)
-                )
+                if name not in DEFAULT_PORTAL_SPAN_DISPLAY_NAMES:
+                    display_names[name] = (
+                        classification.display_name
+                        or classification.labeled_as
+                        or self._span_display_name(name)
+                    )
             if span_types is None:
                 visible_types = [
                     classification.name

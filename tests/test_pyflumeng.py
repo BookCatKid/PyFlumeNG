@@ -472,7 +472,12 @@ def test_usage_breakdown_matches_live_portal_rollup_and_total_query(requests_moc
         json={
             "success": True,
             "data": [
-                {"name": "OUTDOOR", "display_name": "Outdoor", "can_view": True},
+                {
+                    "name": "OUTDOOR",
+                    "display_name": "Outdoor Unknown",
+                    "labeled_as": "Outdoor (Other)",
+                    "can_view": True,
+                },
                 {"name": "INDOOR", "display_name": "Indoor", "can_view": True},
                 {"name": "SHOWER", "display_name": "Shower", "can_view": True},
                 {"name": "TOILET", "display_name": "Toilet", "can_view": True},
@@ -517,6 +522,7 @@ def test_usage_breakdown_matches_live_portal_rollup_and_total_query(requests_moc
         "DISH_WASHER",
     ]
     assert breakdown.category("OUTDOOR").usage == pytest.approx(1736.88786625)
+    assert breakdown.category("OUTDOOR").display_name == "Outdoor"
     assert breakdown.category("INDOOR").span_count == 0
     assert breakdown.category("INDOOR").usage == pytest.approx(1012.9051469)
     assert [category.rounded_percentage for category in breakdown.categories] == [
