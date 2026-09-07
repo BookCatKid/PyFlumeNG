@@ -1,7 +1,7 @@
 """Authenticates to Flume API."""
 
-import json
 from datetime import datetime, timedelta, timezone
+import json
 from typing import Any, ClassVar, Dict, FrozenSet, Mapping, Optional, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -211,7 +211,9 @@ class FlumeAuth:  # noqa: WPS214
         token_expiration = datetime.fromtimestamp(
             self._decoded_token["exp"], tz=timezone.utc
         )
-        time_difference = datetime.now(timezone.utc) + timedelta(hours=12)  # noqa: WPS432
+        time_difference = datetime.now(timezone.utc) + timedelta(
+            hours=12
+        )  # noqa: WPS432
         LOGGER.debug("Token expiration time: %s", token_expiration)  # noqa: WPS323
         LOGGER.debug("Token comparison time: %s", time_difference)  # noqa: WPS323
 
@@ -346,8 +348,32 @@ class FlumePortalAuth:  # noqa: WPS214
         self.refresh_token()
 
     def ensure_valid(self) -> None:
-        """Refresh when the token expires within twelve hours."""
+        """Refresh when the portal token approaches expiry."""
         self._verify_token()
+
+    def logout(self) -> JSONDict:
+        """Revoke the portal refresh token and clear local authentication state."""
+        refresh_token = self._token.get("refresh_token") if self._token else None
+        try:
+            if not refresh_token:
+                return {}
+            response = self._http_session.post(
+                PORTAL_API_URL + "/oauth/logout",
+                json={"refresh_token": refresh_token},
+                headers={"Content-Type": "application/json"},
+                timeout=self._timeout,
+            )
+            flume_response_error("Can't log out of portal", response)
+            try:
+                result = response.json()
+            except ValueError:
+                result = {}
+            return cast(JSONDict, result)
+        finally:
+            self._token = None
+            self._decoded_token = None
+            self.user_id = None
+            self.authorization_header = None
 
     def _load_token(self, token: Mapping[str, Any]) -> None:
         """Update token, user ID, decoded claims, and authorization header."""
@@ -377,7 +403,7 @@ class FlumePortalAuth:  # noqa: WPS214
         return _validated_token(token_data)
 
     def _verify_token(self) -> None:
-        """Refresh when the token expires within twelve hours."""
+        """Refresh five minutes before expiry, matching the customer portal."""
         if self._decoded_token is None:
             self.retrieve_token()
         if self._decoded_token is None:
@@ -385,6 +411,6 @@ class FlumePortalAuth:  # noqa: WPS214
         token_expiration = datetime.fromtimestamp(
             self._decoded_token["exp"], tz=timezone.utc
         )
-        time_difference = datetime.now(timezone.utc) + timedelta(hours=12)  # noqa: WPS432
+        time_difference = datetime.now(timezone.utc) + timedelta(minutes=5)
         if token_expiration <= time_difference:
             self.refresh_token()

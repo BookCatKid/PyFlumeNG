@@ -37,13 +37,15 @@ Authenticate using the customer portal OAuth authorization-code flow.
 - `refresh() -> None`
   Refresh through the common PyFlumeNG auth interface.
 - `ensure_valid() -> None`
-  Refresh when the token expires within twelve hours.
+  Refresh when the portal token approaches expiry.
+- `logout() -> JSONDict`
+  Revoke the portal refresh token and clear local authentication state.
 
 ### `FlumeClient`
 
 Call Flume endpoints with a PersonalAuth or PortalAuth object.
 
-- `FlumeClient(auth: Union[FlumeAuth, FlumePortalAuth], http_session: Optional[Session] = None, base_url: str = API_BASE_URL, timeout: float = 30) -> None`
+- `FlumeClient(auth: Union[FlumeAuth, FlumePortalAuth], http_session: Optional[Session] = None, base_url: Optional[str] = None, timeout: float = 30) -> None`
 - `request(method: str, path: str, params: Optional[RequestParams] = None, json: Optional[JSONValue] = None, data: Any = None, **kwargs: Any) -> JSONDict`
   Return the complete Flume response envelope.
 - `data(method: str, path: str, model: Type[ModelT], **kwargs: Any) -> Union[ModelT, List[ModelT]]`
@@ -65,7 +67,7 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Fetch one device using the user-scoped route with portal auth data.
 - `query(device_id: ResourceId, payload: JSONDict) -> List[QueryResult]`
 - `portal_query(device_id: ResourceId, payload: JSONDict) -> List[QueryResult]`
-  Run the read-only device query using the user-scoped route.
+  Run a portal query, splitting requests at the portal's ten-query limit.
 - `get_current_flow(device_id: ResourceId) -> Optional[CurrentFlow]`
 - `get_portal_current_flow(device_id: ResourceId) -> Optional[CurrentFlow]`
   Read current flow using the user-scoped route with portal auth.
@@ -79,10 +81,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Fetch one location using the user-scoped route with portal auth data.
 - `create_location(payload: JSONDict) -> JSONValue`
 - `create_portal_location(payload: JSONDict) -> JSONValue`
-  Create a location through the portal's root location route.
+  Create a location through the portal's user-scoped route.
 - `update_location(location_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_portal_location(location_id: ResourceId, payload: JSONDict) -> JSONValue`
-  Update a location through the portal's root location route.
+  Update a location through the portal's user-scoped route.
 - `update_user(payload: JSONDict) -> JSONValue`
 - `update_portal_user(payload: JSONDict) -> JSONValue`
   Update the current user through the portal's collection route.
@@ -96,10 +98,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Fetch one notification using the user-scoped route with portal auth.
 - `update_notification(notification_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_portal_notification(notification_id: ResourceId, payload: JSONDict) -> JSONValue`
-  Update a notification through the portal's root route.
+  Update a notification through the portal's user-scoped route.
 - `delete_notification(notification_id: ResourceId) -> JSONValue`
 - `delete_portal_notification(notification_id: ResourceId) -> JSONValue`
-  Delete a notification through the portal's root route.
+  Delete a notification through the portal's user-scoped route.
 - `set_notification_read(notification_id: ResourceId, read: bool = True, portal: bool = True) -> JSONValue`
   Set notification read state using the portal's frontend payload.
 - `list_usage_alerts(**params: JSONValue) -> List[UsageAlert]`
@@ -112,7 +114,7 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Fetch one usage rule using the user-scoped route with portal auth.
 - `create_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `create_portal_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
-  Create a rule through the portal's root device route.
+  Create a rule through the portal's user-scoped device route.
 - `update_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_portal_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a rule using the portal service's collection PATCH form.
@@ -136,7 +138,7 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Fetch one budget using the user-scoped route with portal auth.
 - `create_budget(device_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `create_portal_budget(device_id: ResourceId, payload: JSONDict) -> JSONValue`
-  Create a budget through the portal's root device route.
+  Create a budget through the portal's user-scoped device route.
 - `update_budget(device_id: ResourceId, budget_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_portal_budget(device_id: ResourceId, budget_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a budget using the portal service's collection PATCH form.
@@ -151,7 +153,7 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Fetch a subscription using the user-scoped route with portal auth.
 - `create_location_subscription(location_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `create_portal_subscription(location_id: ResourceId, payload: JSONDict) -> JSONValue`
-  Create a subscription through the portal's root location route.
+  Create a subscription through the portal's user-scoped location route.
 - `update_subscription(subscription_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_portal_subscription(subscription_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a subscription through the portal's collection PATCH form.
@@ -184,10 +186,10 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Fetch a sharing record using the user-scoped route with portal auth.
 - `grant_location_access(location_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `grant_portal_location_access(location_id: ResourceId, payload: JSONDict) -> JSONValue`
-  Grant sharing access through the portal's root location route.
+  Grant sharing access through the portal's user-scoped location route.
 - `revoke_location_access(location_id: ResourceId, access_id: ResourceId) -> JSONValue`
 - `revoke_portal_location_access(location_id: ResourceId, access_id: ResourceId) -> JSONValue`
-  Revoke sharing access through the portal collection route.
+  Revoke sharing access through the portal's user-scoped route.
 - `list_integrations(device_id: ResourceId, **params: JSONValue) -> List[Integration]`
 - `list_portal_integrations(device_id: ResourceId, **params: JSONValue) -> List[Integration]`
   List integrations through the portal's user-scoped route.
@@ -227,7 +229,7 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   List insurers through the portal root route.
 - `list_clients(**params: JSONValue) -> List[ApiClient]`
 - `list_portal_clients(**params: JSONValue) -> List[ApiClient]`
-  List API clients through the portal root route.
+  List API clients through the portal's user-scoped route.
 - `create_client(payload: Optional[JSONDict] = None) -> JSONValue`
 - `generate_api_client() -> JSONValue`
   Generate a portal API client using the portal's empty payload.

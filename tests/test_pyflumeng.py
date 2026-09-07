@@ -1,5 +1,6 @@
 """Tests for the standalone PyFlumeNG package."""
 
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -20,7 +21,7 @@ from pyflume import (
     UsageAlertSchedule,
 )
 from pyflume.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
-from pyflume.constants import API_BASE_URL, URL_OAUTH_TOKEN
+from pyflume.constants import API_BASE_URL, PORTAL_API_URL, URL_OAUTH_TOKEN
 from pyflume.devices import FlumeDeviceList
 from pyflume.errors import FlumeCapabilityError, FlumeRateLimitError
 from pyflume.leak import FlumeLeakList
@@ -95,10 +96,49 @@ def test_portal_auth_uses_browser_oauth_flow(requests_mock):
     )
 
 
+def test_portal_auth_refreshes_five_minutes_before_expiry(requests_mock):
+    """Portal auth uses the frontend's five-minute JWT refresh buffer."""
+    portal = PortalAuth("user@example.com", "password", flume_token=token())
+    assert portal._decoded_token is not None
+    portal._decoded_token["exp"] = int(
+        (datetime.now(timezone.utc) + timedelta(minutes=6)).timestamp()
+    )
+    requests_mock.post(
+        PORTAL_TOKEN_URL,
+        json={"data": [token("read update delete")], "success": True},
+    )
+
+    portal.ensure_valid()
+    assert requests_mock.call_count == 0
+
+    portal._decoded_token["exp"] = int(
+        (datetime.now(timezone.utc) + timedelta(minutes=4)).timestamp()
+    )
+    portal.ensure_valid()
+    assert requests_mock.call_count == 1
+
+
+def test_portal_logout_revokes_refresh_token_and_clears_auth(requests_mock):
+    """Logout mirrors the portal's refresh-token revocation request."""
+    requests_mock.post(
+        PORTAL_API_URL + "/oauth/logout",
+        json={"success": True, "data": []},
+    )
+    portal = PortalAuth("user@example.com", "password", flume_token=token())
+
+    result = portal.logout()
+
+    assert result["success"] is True
+    assert requests_mock.last_request.json() == {"refresh_token": "refresh-token"}
+    assert portal.token is None
+    assert portal.user_id is None
+    assert portal.authorization_header is None
+
+
 def test_client_returns_envelope_and_follows_pagination(requests_mock):
     """The raw client preserves envelopes while list_all flattens pages."""
-    first_url = API_BASE_URL + "/users/12345/devices"
-    next_url = API_BASE_URL + "/users/12345/devices?offset=1&limit=1"
+    first_url = PORTAL_API_URL + "/users/12345/devices"
+    next_url = PORTAL_API_URL + "/users/12345/devices?offset=1&limit=1"
     requests_mock.get(
         first_url,
         json={
@@ -120,6 +160,20 @@ def test_client_returns_envelope_and_follows_pagination(requests_mock):
 
     assert envelope["success"] is True
     assert [device["id"] for device in devices] == ["first", "second"]
+
+
+def test_list_devices_matches_portal_pagination_query(requests_mock):
+    """Device listing uses the portal's 2,000-record first page."""
+    url = API_BASE_URL + "/users/12345/devices"
+    requests_mock.get(url, json={"success": True, "data": [{"id": "device"}]})
+    client = FlumeClient(auth())
+
+    devices = client.list_devices(user=True, location=True)
+
+    assert [device.id for device in devices] == ["device"]
+    assert requests_mock.last_request.query == (
+        "user=true&location=true&limit=2000&offset=0"
+    )
 
 
 def test_usage_rule_read_does_not_change_legacy_usage_pagination(requests_mock):
@@ -222,7 +276,7 @@ def test_rate_limit_state_ignores_invalid_header_values():
 
 def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
     """Rule updates use the portal-capable endpoint and preserve empty data."""
-    url = API_BASE_URL + "/users/12345/devices/device/rules/usage-alerts/rule"
+    url = PORTAL_API_URL + "/users/12345/devices/device/rules/usage-alerts/rule"
     requests_mock.patch(url, json={"success": True, "code": 612, "data": []})
     client = FlumeClient(
         PortalAuth("user@example.com", "password", flume_token=token())
@@ -244,6 +298,32 @@ def test_personal_auth_rejects_portal_rule_write_before_transport(requests_mock)
     assert requests_mock.call_count == 0
 
 
+def test_portal_query_batches_and_combines_more_than_ten_queries(requests_mock):
+    """Portal queries reproduce the frontend's ten-query request limit."""
+    url = PORTAL_API_URL + "/users/12345/devices/device/query"
+    requests_mock.post(
+        url,
+        [
+            {"json": {"success": True, "data": [{"first": [{"value": 1}]}]}},
+            {"json": {"success": True, "data": [{"second": [{"value": 2}]}]}},
+        ],
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+    queries = [{"request_id": str(index)} for index in range(12)]
+
+    result = client.portal_query("device", {"queries": queries})
+
+    assert len(requests_mock.request_history) == 2
+    assert len(requests_mock.request_history[0].json()["queries"]) == 10
+    assert len(requests_mock.request_history[1].json()["queries"]) == 2
+    assert result[0].to_dict() == {
+        "first": [{"value": 1}],
+        "second": [{"value": 2}],
+    }
+
+
 def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
     """Named portal wrappers preserve frontend paths, query, and payloads."""
     requests_mock.get(
@@ -256,7 +336,7 @@ def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
     )
     requests_mock.patch(
         API_BASE_URL
-        + "/users/12345/devices/device/rules/usage-alerts/rule/do-not-alert-schedules",
+        + "/users/12345/devices/device/rules/usage-alerts/rule/do-not-alert-schedules/16158",
         json={"success": True, "data": []},
     )
     client = FlumeClient(auth())
@@ -266,7 +346,7 @@ def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
     assert requests_mock.request_history[-1].json() == {"type": "IRRIGATION"}
     client.toggle_usage_alert_schedule("device", "rule", 16158, False)
     assert requests_mock.last_request.path.endswith(
-        "/rules/usage-alerts/rule/do-not-alert-schedules",
+        "/rules/usage-alerts/rule/do-not-alert-schedules/16158",
     )
     assert requests_mock.last_request.json() == {"active": False}
 
@@ -326,8 +406,8 @@ def test_portal_accuracy_payload_wrapper(requests_mock):
         "2026-09-06 11:00:00",
         100,
         101,
-        "before-image",
-        "after-image",
+        "data:image/jpeg;base64,before-image",
+        "data:image/png;base64,after-image",
         "GALLONS",
     )
 
@@ -533,16 +613,16 @@ def test_full_do_not_alert_schedule_allows_null_updated_datetime():
 def test_portal_read_aliases_use_working_user_scoped_routes(requests_mock):
     """Portal read aliases do not call the invalid guessed root routes."""
     requests_mock.get(
-        API_BASE_URL + "/users/12345/devices",
+        PORTAL_API_URL + "/users/12345/devices",
         json={"success": True, "data": [{"id": "device"}]},
     )
     requests_mock.get(
-        API_BASE_URL + "/users/12345/notifications",
+        PORTAL_API_URL + "/users/12345/notifications",
         json={"success": True, "data": [{"id": "notice"}]},
     )
     requests_mock.get(
-        API_BASE_URL + "/users/12345/devices/device/query/active",
-        json={"success": True, "data": [{"value": 1.5}]},
+        PORTAL_API_URL + "/users/12345/devices/device/query/active",
+        json={"success": True, "data": [{"active": True, "gpm": 1.5}]},
     )
     client = FlumeClient(
         PortalAuth("user@example.com", "password", flume_token=token())
@@ -550,12 +630,47 @@ def test_portal_read_aliases_use_working_user_scoped_routes(requests_mock):
 
     assert client.list_portal_devices()[0].id == "device"
     assert client.list_portal_notifications()[0].id == "notice"
-    assert client.get_portal_current_flow("device").value == 1.5
+    assert client.get_portal_current_flow("device").gpm == 1.5
+
+    assert client.base_url == PORTAL_API_URL
+
+
+def test_portal_services_match_frontend_user_scoped_routes(requests_mock):
+    """Portal services use the user prefix applied by the frontend fetch layer."""
+    requests_mock.post(
+        PORTAL_API_URL + "/users/12345/locations",
+        json={"success": True, "data": [{"id": "location"}]},
+    )
+    requests_mock.patch(
+        PORTAL_API_URL + "/users/12345/notifications/notice",
+        json={"success": True, "data": []},
+    )
+    requests_mock.post(
+        PORTAL_API_URL + "/users/12345/locations/location/access",
+        json={"success": True, "data": []},
+    )
+    requests_mock.get(
+        PORTAL_API_URL + "/users/12345/clients",
+        json={"success": True, "data": [{"name": "client"}]},
+    )
+    client = FlumeClient(
+        PortalAuth(
+            "user@example.com", "password", flume_token=token("read update delete")
+        )
+    )
+
+    client.create_portal_location({"name": "test"})
+    client.update_portal_notification("notice", {"read": True})
+    client.grant_portal_location_access(
+        "location", {"email_address": "guest@example.com"}
+    )
+    assert client.list_portal_clients()[0].name == "client"
 
     assert [request.path for request in requests_mock.request_history] == [
-        "/users/12345/devices",
-        "/users/12345/notifications",
-        "/users/12345/devices/device/query/active",
+        "/users/12345/locations",
+        "/users/12345/notifications/notice",
+        "/users/12345/locations/location/access",
+        "/users/12345/clients",
     ]
 
 

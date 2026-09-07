@@ -86,7 +86,9 @@ client = pyflume.FlumeClient(auth)
 
 Portal auth does not take your Personal API client ID or secret. PyFlumeNG uses
 the customer-portal client and follows the login/authorization-code exchange
-used by Flume's web application.
+used by Flume's web application. `FlumeClient` automatically selects
+`https://api.flumewater.com` for this auth mode; an explicit `base_url` still
+overrides that default.
 
 The resulting auth object has `personal_api`, `portal_api`, and
 `portal_writes` capabilities. That is why it can be passed to the same
@@ -94,6 +96,10 @@ user-scoped read helpers as `PersonalAuth` while also unlocking additional
 portal-only operations. Its `RateLimitState` starts with the portal baseline of 72,000
 requests and, like PersonalAuth, is replaced by values reported in response
 headers.
+
+Portal tokens refresh five minutes before expiry, matching the web
+application's refresh window. Call `auth.logout()` to revoke the refresh token
+through `/oauth/logout` and clear the local token state.
 
 Portal auth is required for operations that Flume rejects when performed with
 a normal Personal API token. Usage-alert rule writes are the clearest example:

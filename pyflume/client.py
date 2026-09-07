@@ -19,7 +19,7 @@ from urllib.parse import urljoin
 from requests import Response, Session
 
 from .auth import FlumeAuth, FlumePortalAuth
-from .constants import API_BASE_URL
+from .constants import API_BASE_URL, PORTAL_API_URL
 from .errors import FlumeCapabilityError, FlumeHTTPError, FlumeRateLimitError
 from .models import (
     AccuracyResult,
@@ -72,7 +72,7 @@ class FlumeClient:
         self,
         auth: Union[FlumeAuth, FlumePortalAuth],
         http_session: Optional[Session] = None,
-        base_url: str = API_BASE_URL,
+        base_url: Optional[str] = None,
         timeout: float = 30,
     ) -> None:
         self.auth: Union[FlumeAuth, FlumePortalAuth] = auth
@@ -80,7 +80,10 @@ class FlumeClient:
         self._http_session: Session = http_session or (
             auth_session if isinstance(auth_session, Session) else Session()
         )
-        self.base_url: str = base_url.rstrip("/")
+        selected_base_url = (
+            PORTAL_API_URL if isinstance(auth, FlumePortalAuth) else API_BASE_URL
+        )
+        self.base_url: str = (base_url or selected_base_url).rstrip("/")
         self.timeout: float = timeout
         self.last_response: Optional[Response] = None
         self.rate_limit = auth.rate_limit
@@ -270,7 +273,10 @@ class FlumeClient:
         A repeated pagination link is treated as a server-side pagination
         failure and stops traversal instead of causing an infinite loop.
         """
-        request_params = dict(params or {})
+        request_params = {
+            key: str(value).lower() if isinstance(value, bool) else value
+            for key, value in (params or {}).items()
+        }
         request_params.setdefault("limit", 2000)
         request_params.setdefault("offset", 0)
         next_path: Optional[str] = path
@@ -342,8 +348,18 @@ class FlumeClient:
     def portal_query(
         self, device_id: ResourceId, payload: JSONDict
     ) -> List[QueryResult]:
-        """Run the read-only device query using the user-scoped route."""
-        return self.query(device_id, payload)
+        """Run a portal query, splitting requests at the portal's ten-query limit."""
+        queries = payload.get("queries")
+        if not isinstance(queries, list) or len(queries) <= 10:
+            return self.query(device_id, payload)
+
+        combined = QueryResult()
+        for offset in range(0, len(queries), 10):
+            chunk_payload = dict(payload)
+            chunk_payload["queries"] = queries[offset : offset + 10]
+            for result in self.query(device_id, cast(JSONDict, chunk_payload)):
+                combined.update(result.to_dict())
+        return [combined]
 
     def get_current_flow(self, device_id: ResourceId) -> Optional[CurrentFlow]:
         return self.data_one(
@@ -381,9 +397,9 @@ class FlumeClient:
         return self.data("POST", self._user_path("/locations"), json=payload)
 
     def create_portal_location(self, payload: JSONDict) -> JSONValue:
-        """Create a location through the portal's root location route."""
+        """Create a location through the portal's user-scoped route."""
         self._require_capability("portal_writes")
-        return self.data("POST", "/locations", json=payload)
+        return self.create_location(payload)
 
     def update_location(self, location_id: ResourceId, payload: JSONDict) -> JSONValue:
         return self.data(
@@ -393,9 +409,9 @@ class FlumeClient:
     def update_portal_location(
         self, location_id: ResourceId, payload: JSONDict
     ) -> JSONValue:
-        """Update a location through the portal's root location route."""
+        """Update a location through the portal's user-scoped route."""
         self._require_capability("portal_writes")
-        return self.data("PATCH", "/locations/{0}".format(location_id), json=payload)
+        return self.update_location(location_id, payload)
 
     def update_user(self, payload: JSONDict) -> JSONValue:
         return self.data("PATCH", self._user_path(), json=payload)
@@ -446,11 +462,9 @@ class FlumeClient:
         notification_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
-        """Update a notification through the portal's root route."""
+        """Update a notification through the portal's user-scoped route."""
         self._require_capability("portal_writes")
-        return self.data(
-            "PATCH", "/notifications/{0}".format(notification_id), json=payload
-        )
+        return self.update_notification(notification_id, payload)
 
     def delete_notification(self, notification_id: ResourceId) -> JSONValue:
         return self.data(
@@ -458,9 +472,11 @@ class FlumeClient:
         )
 
     def delete_portal_notification(self, notification_id: ResourceId) -> JSONValue:
-        """Delete a notification through the portal's root route."""
+        """Delete a notification through the portal's user-scoped route."""
         self._require_capability("portal_writes")
-        return self.data("DELETE", "/notifications/{0}".format(notification_id))
+        return self.data(
+            "DELETE", self._user_path("/notifications/{0}".format(notification_id))
+        )
 
     def set_notification_read(
         self,
@@ -543,10 +559,12 @@ class FlumeClient:
         device_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
-        """Create a rule through the portal's root device route."""
+        """Create a rule through the portal's user-scoped device route."""
         self._require_capability("portal_writes")
         return self.data(
-            "POST", "/devices/{0}/rules/usage-alerts".format(device_id), json=payload
+            "POST",
+            self._user_path("/devices/{0}/rules/usage-alerts".format(device_id)),
+            json=payload,
         )
 
     def update_usage_alert_rule(
@@ -574,7 +592,9 @@ class FlumeClient:
         self._require_capability("portal_writes")
         return self.data(
             "PATCH",
-            "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id),
+            self._user_path(
+                "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
+            ),
             json=payload,
         )
 
@@ -596,7 +616,10 @@ class FlumeClient:
         """Delete a rule through the portal service's collection route."""
         self._require_capability("portal_writes")
         return self.data(
-            "DELETE", "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
+            "DELETE",
+            self._user_path(
+                "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
+            ),
         )
 
     def set_usage_alert_rule_active(
@@ -695,8 +718,12 @@ class FlumeClient:
     def create_portal_budget(
         self, device_id: ResourceId, payload: JSONDict
     ) -> JSONValue:
-        """Create a budget through the portal's root device route."""
-        return self.data("POST", "/devices/{0}/budgets".format(device_id), json=payload)
+        """Create a budget through the portal's user-scoped device route."""
+        return self.data(
+            "POST",
+            self._user_path("/devices/{0}/budgets".format(device_id)),
+            json=payload,
+        )
 
     def update_budget(
         self,
@@ -719,7 +746,7 @@ class FlumeClient:
         """Update a budget using the portal service's collection PATCH form."""
         return self.data(
             "PATCH",
-            "/devices/{0}/budgets/{1}".format(device_id, budget_id),
+            self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
             json=payload,
         )
 
@@ -734,7 +761,8 @@ class FlumeClient:
     ) -> JSONValue:
         """Delete a budget using the portal service's collection route."""
         return self.data(
-            "DELETE", "/devices/{0}/budgets/{1}".format(device_id, budget_id)
+            "DELETE",
+            self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
         )
 
     def list_subscriptions(self, **params: JSONValue) -> List[Subscription]:
@@ -773,9 +801,11 @@ class FlumeClient:
         location_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
-        """Create a subscription through the portal's root location route."""
+        """Create a subscription through the portal's user-scoped location route."""
         return self.data(
-            "POST", "/locations/{0}/subscriptions".format(location_id), json=payload
+            "POST",
+            self._user_path("/locations/{0}/subscriptions".format(location_id)),
+            json=payload,
         )
 
     def update_subscription(
@@ -794,7 +824,9 @@ class FlumeClient:
     ) -> JSONValue:
         """Update a subscription through the portal's collection PATCH form."""
         return self.data(
-            "PATCH", "/subscriptions/{0}".format(subscription_id), json=payload
+            "PATCH",
+            self._user_path("/subscriptions/{0}".format(subscription_id)),
+            json=payload,
         )
 
     def delete_subscription(self, subscription_id: ResourceId) -> JSONValue:
@@ -804,7 +836,9 @@ class FlumeClient:
 
     def delete_portal_subscription(self, subscription_id: ResourceId) -> JSONValue:
         """Delete a subscription through the portal's collection route."""
-        return self.data("DELETE", "/subscriptions/{0}".format(subscription_id))
+        return self.data(
+            "DELETE", self._user_path("/subscriptions/{0}".format(subscription_id))
+        )
 
     def create_stripe_portal(self, return_url: str) -> JSONValue:
         return self.data(
@@ -949,8 +983,7 @@ class FlumeClient:
         )
         return self.data(
             "PATCH",
-            path,
-            params={"id": schedule_id},
+            path + "/{0}".format(schedule_id),
             json={"active": bool(active)},
         )
 
@@ -1023,10 +1056,8 @@ class FlumeClient:
         location_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
-        """Grant sharing access through the portal's root location route."""
-        return self.data(
-            "POST", "/locations/{0}/access".format(location_id), json=payload
-        )
+        """Grant sharing access through the portal's user-scoped location route."""
+        return self.grant_location_access(location_id, payload)
 
     def revoke_location_access(
         self,
@@ -1043,10 +1074,8 @@ class FlumeClient:
         location_id: ResourceId,
         access_id: ResourceId,
     ) -> JSONValue:
-        """Revoke sharing access through the portal collection route."""
-        return self.data(
-            "DELETE", "/locations/{0}/access/{1}".format(location_id, access_id)
-        )
+        """Revoke sharing access through the portal's user-scoped route."""
+        return self.revoke_location_access(location_id, access_id)
 
     def list_integrations(
         self, device_id: ResourceId, **params: JSONValue
@@ -1295,8 +1324,8 @@ class FlumeClient:
                 "until_datetime": until_datetime,
                 "since_reading": since_reading,
                 "until_reading": until_reading,
-                "since_image": since_image,
-                "until_image": until_image,
+                "since_image": self._portal_image_data(since_image),
+                "until_image": self._portal_image_data(until_image),
                 "units": units,
             },
         )
@@ -1363,14 +1392,14 @@ class FlumeClient:
         return self.list_all("/insurers", params, Insurer)
 
     def list_clients(self, **params: JSONValue) -> List[ApiClient]:
-        return self.list_all("/clients", params, ApiClient)
+        return self.list_all(self._user_path("/clients"), params, ApiClient)
 
     def list_portal_clients(self, **params: JSONValue) -> List[ApiClient]:
-        """List API clients through the portal root route."""
-        return self.list_all("/clients", params, ApiClient)
+        """List API clients through the portal's user-scoped route."""
+        return self.list_clients(**params)
 
     def create_client(self, payload: Optional[JSONDict] = None) -> JSONValue:
-        return self.data("POST", "/clients", json=payload or {})
+        return self.data("POST", self._user_path("/clients"), json=payload or {})
 
     def generate_api_client(self) -> JSONValue:
         """Generate a portal API client using the portal's empty payload."""
@@ -1378,6 +1407,13 @@ class FlumeClient:
 
     def get_contact_info(self, **params: JSONValue) -> List[Contact]:
         return self.list_all("/contacts", params, Contact)
+
+    @staticmethod
+    def _portal_image_data(value: str) -> str:
+        """Return the Base64 payload sent by the portal's accuracy form."""
+        if value.startswith("data:") and "," in value:
+            return value.split(",", 1)[1]
+        return value
 
     def raw(self, method: str, path: str, **kwargs: Any) -> JSONDict:
         """Call any current or future Flume endpoint without a new wrapper."""

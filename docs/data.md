@@ -83,3 +83,6 @@ For arbitrary queries and current flow, use the typed `FlumeClient.query()` and
 The `portal_query()` and `get_portal_current_flow()` convenience methods now
 delegate to those same working user-scoped routes; live testing found that the
 guessed root-device query routes are not valid portal reads.
+`portal_query()` also divides payloads containing more than ten queries into
+the same ten-query batches used by the web application and combines their
+results.
