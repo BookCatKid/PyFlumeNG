@@ -108,6 +108,11 @@ The original helper classes remain available and typed:
 - [Notifications](docs/notifications.md)
 - [Usage alerts](docs/usage.md)
 
+## Examples
+
+The [examples](examples/README.md) include an interactive portal utility that
+lists usage-alert rules and explicitly enables or disables the selected rule.
+
 ## Development
 
 The API reference is generated from source signatures and model annotations:
