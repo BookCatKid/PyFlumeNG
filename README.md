@@ -84,6 +84,10 @@ Higher-level typed helpers are available for common dashboard data as well:
 rolls raw irrigation into Outdoor, derives Indoor as the unclassified residual,
 and returns category usage/percentages. `Budget` exposes `used`, `target`,
 `remaining`, `percentage_used`, and `is_over_budget` progress properties.
+Portal semantic helpers additionally cover notification preference bitmasks
+without dropping unknown bits, structured usage-alert history, AVG notification
+detail, validated usage-rule/Smart-Leak and Do Not Alert payloads, and
+percentage-based budget configuration.
 
 `pyflumeng` ships a `py.typed` marker so installed type checkers can consume the
 package annotations. The complete method signatures and model fields are in the

@@ -144,6 +144,29 @@ print(budget.remaining, budget.is_over_budget)
 Flume has not supplied an `actual` value. `percentage_used` is also `None` for
 a zero/non-positive target.
 
+Budget writes use absolute usage values in the API even though the portal form
+shows percentages. `build_budget_payload()` and
+`create_budget_configured()`/`update_budget_configured()` accept percentage
+thresholds and convert them with the portal formula
+`round(percentage * value / 100)`. `Budget.threshold_percentages` performs the
+reverse conversion for display. `BudgetPeriod` contains the three portal form
+types: `DAILY`, `WEEKLY`, and `MONTHLY`.
+
+### Settings semantics
+
+The high-level settings helpers intentionally keep the audited routes while
+removing raw-payload work for common operations. Examples include
+`list_emergency_contacts()` plus emergency-contact create/update/delete,
+`share_location()`/`unshare_location()`, `relabel_span()`, typed
+`get_location_profiles()`, and `check_meter_accuracy()`. Emergency contacts are
+modeled as subscriptions and use the portal's email `alert_info` structure.
+
+Audited portal-only mutation helpers enforce `portal_writes` even when using
+their clean unprefixed names. This includes budget writes, subscriptions and
+emergency contacts, shared access, span relabel/update, Do Not Alert and usage
+rule writes, and meter-accuracy submissions. Reads remain usable with either
+auth mode where the server permits them.
+
 For writes where the portal's broader token is known to be required,
 `FlumeClient` checks the auth capability before making the request. Examples
 include portal usage-alert rule writes and portal notification/location/account

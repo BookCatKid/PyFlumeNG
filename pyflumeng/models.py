@@ -6,6 +6,8 @@ field is retained in the model and included by :meth:`to_dict`.
 """
 
 from copy import deepcopy
+from datetime import datetime
+from math import floor
 from typing import (
     Any,
     Callable,
@@ -25,6 +27,11 @@ from typing import (
     overload,
 )
 
+from .semantics import (
+    NotificationPreference,
+    set_notification_preference_bit,
+    unknown_notification_preference_bits,
+)
 from .types import JSONDict, JSONValue, ResourceId
 
 ModelT = TypeVar("ModelT", bound="FlumeModel")
@@ -458,6 +465,8 @@ class NotificationQuery(FlumeModel):
     since_datetime: str
     tz: str
     until_datetime: str
+    operation: Optional[str]
+    units: Optional[str]
 
     defaults = {
         "bucket": "",
@@ -465,7 +474,25 @@ class NotificationQuery(FlumeModel):
         "since_datetime": "",
         "tz": "",
         "until_datetime": "",
+        "operation": None,
+        "units": None,
     }
+
+    @property
+    def duration_seconds(self) -> Optional[float]:
+        """Return the query-window duration when both timestamps are parseable."""
+        try:
+            since = datetime.fromisoformat(self.since_datetime.replace("Z", "+00:00"))
+            until = datetime.fromisoformat(self.until_datetime.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        return max((until - since).total_seconds(), 0.0)
+
+    @property
+    def duration_minutes(self) -> Optional[float]:
+        """Return the query-window duration in minutes."""
+        seconds = self.duration_seconds
+        return None if seconds is None else seconds / 60.0
 
 
 class NotificationExtra(FlumeModel):
@@ -492,6 +519,34 @@ class NotificationExtra(FlumeModel):
 Notification.nested = {"extra": NotificationExtra}
 
 
+class UsageAlertQuery(FlumeModel):
+    """Query window stored on a triggered usage-alert history item."""
+
+    request_id: str
+    bucket: str
+    since_datetime: str
+    until_datetime: str
+    tz: str
+
+    defaults = {
+        "request_id": "",
+        "bucket": "",
+        "since_datetime": "",
+        "until_datetime": "",
+        "tz": "",
+    }
+
+    @property
+    def duration_minutes(self) -> Optional[float]:
+        """Return alert-window duration in minutes when timestamps are parseable."""
+        try:
+            since = datetime.fromisoformat(self.since_datetime.replace("Z", "+00:00"))
+            until = datetime.fromisoformat(self.until_datetime.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        return max((until - since).total_seconds(), 0.0) / 60.0
+
+
 class UsageAlert(FlumeModel):
     """Triggered usage-alert event."""
 
@@ -499,7 +554,7 @@ class UsageAlert(FlumeModel):
     device_id: Optional[ResourceId]
     triggered_datetime: Optional[str]
     flume_leak: bool
-    query: JSONValue
+    query: Optional[UsageAlertQuery]
     event_rule_name: Optional[str]
 
     defaults = {
@@ -509,6 +564,37 @@ class UsageAlert(FlumeModel):
         "flume_leak": False,
         "query": None,
         "event_rule_name": None,
+    }
+    nested = {"query": UsageAlertQuery}
+
+
+class NotificationUsageDetail(FlumeModel):
+    """Portal-style AVG re-query details for a usage-alert notification."""
+
+    notification_id: Optional[ResourceId]
+    device_id: Optional[ResourceId]
+    request_id: str
+    bucket: str
+    since_datetime: str
+    until_datetime: str
+    tz: str
+    units: str
+    duration_minutes: Optional[float]
+    average_gpm: Optional[float]
+    values: List[float]
+
+    defaults = {
+        "notification_id": None,
+        "device_id": None,
+        "request_id": "",
+        "bucket": "",
+        "since_datetime": "",
+        "until_datetime": "",
+        "tz": "",
+        "units": "GALLONS",
+        "duration_minutes": None,
+        "average_gpm": None,
+        "values": [],
     }
 
 
@@ -665,6 +751,25 @@ class Budget(FlumeModel):
             return None
         return float(self.actual) > self.target
 
+    @property
+    def threshold_percentages(self) -> List[int]:
+        """Convert absolute API thresholds back to portal-style percentages."""
+        if self.target <= 0:
+            return []
+        return [
+            int(floor(float(value) / self.target * 100.0 + 0.5))
+            for value in self.thresholds
+        ]
+
+
+class SubscriptionAlertInfo(FlumeModel):
+    """Delivery target nested in a subscription, such as an email address."""
+
+    type: str
+    info: str
+
+    defaults = {"type": "", "info": ""}
+
 
 class Subscription(FlumeModel):
     """Notification subscription or emergency contact."""
@@ -672,7 +777,7 @@ class Subscription(FlumeModel):
     id: Optional[ResourceId]
     user_id: Optional[ResourceId]
     alert_type: Optional[str]
-    alert_info: JSONValue
+    alert_info: Optional[SubscriptionAlertInfo]
     device_id: Optional[ResourceId]
     notification_types: int
     created_datetime: Optional[str]
@@ -693,14 +798,36 @@ class Subscription(FlumeModel):
         "contact_name": None,
     }
 
-    def has_notification_type(self, notification_type: int) -> bool:
-        return bool(self.notification_types & notification_type)
+    nested = {"alert_info": SubscriptionAlertInfo}
 
-    def enable_notification_type(self, notification_type: int) -> None:
-        self.notification_types |= notification_type
+    @property
+    def unknown_notification_bits(self) -> int:
+        """Return live subscription bits unnamed by the current portal bundle."""
+        return unknown_notification_preference_bits(self.notification_types)
 
-    def disable_notification_type(self, notification_type: int) -> None:
-        self.notification_types &= ~notification_type
+    def has_notification_type(
+        self, notification_type: Union[int, NotificationPreference]
+    ) -> bool:
+        return bool(self.notification_types & int(notification_type))
+
+    def enable_notification_type(
+        self, notification_type: Union[int, NotificationPreference]
+    ) -> None:
+        self.notification_types |= int(notification_type)
+
+    def disable_notification_type(
+        self, notification_type: Union[int, NotificationPreference]
+    ) -> None:
+        self.notification_types &= ~int(notification_type)
+
+    def set_notification_preference(
+        self, preference: NotificationPreference, enabled: bool
+    ) -> int:
+        """Toggle one known bit in-place while retaining unknown subscription bits."""
+        self.notification_types = set_notification_preference_bit(
+            self.notification_types, preference, enabled
+        )
+        return self.notification_types
 
 
 class DoNotAlertSchedule(FlumeModel):
@@ -1026,12 +1153,30 @@ class AccuracyResult(FlumeModel):
 class LocationProfiles(FlumeModel):
     """Appliance/profile metadata returned by ``/location-profiles``."""
 
-    residents: JSONValue
-    bathrooms: JSONValue
-    indoor: List[JSONValue]
-    outdoor: List[JSONValue]
+    residents: Optional["LocationProfileField"]
+    bathrooms: Optional["LocationProfileField"]
+    indoor: List["LocationProfileField"]
+    outdoor: List["LocationProfileField"]
 
     defaults = {"residents": None, "bathrooms": None, "indoor": [], "outdoor": []}
+
+
+class LocationProfileField(FlumeModel):
+    """One field descriptor returned by the root location-profile metadata."""
+
+    field: str
+    display: str
+    default: JSONValue
+
+    defaults = {"field": "", "display": "", "default": None}
+
+
+LocationProfiles.nested = {
+    "residents": LocationProfileField,
+    "bathrooms": LocationProfileField,
+    "indoor": LocationProfileField,
+    "outdoor": LocationProfileField,
+}
 
 
 @overload

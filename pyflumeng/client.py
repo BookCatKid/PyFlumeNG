@@ -39,6 +39,7 @@ from .models import (
     LocationAccess,
     LocationProfiles,
     Notification,
+    NotificationUsageDetail,
     ProService,
     PurchaseOption,
     QueryResult,
@@ -50,6 +51,27 @@ from .models import (
     UsageBreakdown,
     UsageBreakdownCategory,
     User,
+)
+from .semantics import (
+    BudgetPeriod,
+    DoNotAlertWeekday,
+    NotificationPreference,
+    set_notification_preference_bit,
+)
+from .semantics import (
+    build_budget_payload as _build_budget_payload,
+)
+from .semantics import (
+    build_do_not_alert_schedule_payload as _build_do_not_alert_schedule_payload,
+)
+from .semantics import (
+    build_emergency_contact_payload as _build_emergency_contact_payload,
+)
+from .semantics import (
+    build_smart_leak_rule_payload as _build_smart_leak_rule_payload,
+)
+from .semantics import (
+    build_usage_alert_rule_payload as _build_usage_alert_rule_payload,
 )
 from .types import JSONDict, JSONValue, RequestParams, ResourceId
 
@@ -519,8 +541,79 @@ class FlumeClient:
             )
         return self.update_notification(notification_id, {"read": bool(read)})
 
+    def build_notification_usage_query(
+        self,
+        notification: Notification,
+        units: str = "GALLONS",
+    ) -> Optional[JSONDict]:
+        """Build the portal's AVG re-query for a usage-alert notification."""
+        extra = notification.extra
+        query = extra.query if extra is not None else None
+        if (
+            query is None
+            or not query.bucket
+            or not query.since_datetime
+            or not query.until_datetime
+        ):
+            return None
+        return {
+            "queries": [
+                {
+                    "request_id": "notification_detail",
+                    "bucket": query.bucket,
+                    "since_datetime": query.since_datetime,
+                    "until_datetime": query.until_datetime,
+                    "operation": "AVG",
+                    "units": units.upper(),
+                }
+            ]
+        }
+
+    def get_notification_usage_detail(
+        self,
+        notification: Union[Notification, ResourceId],
+        units: str = "GALLONS",
+    ) -> Optional[NotificationUsageDetail]:
+        """Re-query one usage notification and return portal-style AVG detail."""
+        item = (
+            notification
+            if isinstance(notification, Notification)
+            else self.get_notification(notification)
+        )
+        if item is None or item.device_id is None:
+            return None
+        payload = self.build_notification_usage_query(item, units)
+        if payload is None or item.extra is None or item.extra.query is None:
+            return None
+        query = item.extra.query
+        result = self.query(item.device_id, payload)
+        raw_values = result[0].get("notification_detail", []) if result else []
+        values = [
+            float(value["value"])
+            for value in raw_values
+            if isinstance(value, dict) and isinstance(value.get("value"), (int, float))
+        ] if isinstance(raw_values, list) else []
+        average_gpm = (sum(values) / len(values)) if values else None
+        return NotificationUsageDetail(
+            notification_id=item.id,
+            device_id=item.device_id,
+            request_id="notification_detail",
+            bucket=query.bucket,
+            since_datetime=query.since_datetime,
+            until_datetime=query.until_datetime,
+            tz=query.tz,
+            units=units.upper(),
+            duration_minutes=query.duration_minutes,
+            average_gpm=average_gpm,
+            values=values,
+        )
+
     def list_usage_alerts(self, **params: JSONValue) -> List[UsageAlert]:
         return self.list_all(self._user_path("/usage-alerts"), params, UsageAlert)
+
+    def list_usage_alert_history(self, **params: JSONValue) -> List[UsageAlert]:
+        """Return structured triggered usage-alert history from the user feed."""
+        return self.list_usage_alerts(**params)
 
     def list_event_rules(
         self,
@@ -583,6 +676,66 @@ class FlumeClient:
             json=payload,
         )
 
+    @staticmethod
+    def build_usage_alert_rule_payload(
+        name: str,
+        flow_rate: float,
+        duration: int,
+        *,
+        notify_every: int = 0,
+        active: bool = True,
+        shutoff_active: Optional[bool] = None,
+        advanced_low_flow: bool = False,
+    ) -> JSONDict:
+        """Validate and build the customer portal's usage-alert rule payload."""
+        return _build_usage_alert_rule_payload(
+            name,
+            flow_rate,
+            duration,
+            notify_every=notify_every,
+            active=active,
+            shutoff_active=shutoff_active,
+            advanced_low_flow=advanced_low_flow,
+        )
+
+    def create_usage_alert_rule_configured(
+        self,
+        device_id: ResourceId,
+        name: str,
+        flow_rate: float,
+        duration: int,
+        *,
+        notify_every: int = 0,
+        active: bool = True,
+        shutoff_active: Optional[bool] = None,
+    ) -> JSONValue:
+        """Create a validated custom rule without requiring callers to shape JSON."""
+        return self.create_usage_alert_rule(
+            device_id,
+            self.build_usage_alert_rule_payload(
+                name,
+                flow_rate,
+                duration,
+                notify_every=notify_every,
+                active=active,
+                shutoff_active=shutoff_active,
+            ),
+        )
+
+    @staticmethod
+    def build_smart_leak_rule_payload(
+        duration: int,
+        *,
+        notify_every: int = 0,
+        active: bool = True,
+    ) -> JSONDict:
+        """Build the restricted edit payload used for Flume's Smart Leak rule."""
+        return _build_smart_leak_rule_payload(
+            duration,
+            notify_every=notify_every,
+            active=active,
+        )
+
     def create_portal_usage_alert_rule(
         self,
         device_id: ResourceId,
@@ -604,6 +757,52 @@ class FlumeClient:
                 "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
             ),
             json=payload,
+        )
+
+    def update_usage_alert_rule_configured(
+        self,
+        device_id: ResourceId,
+        rule_id: ResourceId,
+        name: str,
+        flow_rate: float,
+        duration: int,
+        *,
+        notify_every: int = 0,
+        active: bool = True,
+        shutoff_active: Optional[bool] = None,
+    ) -> JSONValue:
+        """Update a validated custom rule using the portal's editable fields."""
+        return self.update_usage_alert_rule(
+            device_id,
+            rule_id,
+            self.build_usage_alert_rule_payload(
+                name,
+                flow_rate,
+                duration,
+                notify_every=notify_every,
+                active=active,
+                shutoff_active=shutoff_active,
+            ),
+        )
+
+    def update_smart_leak_rule_configured(
+        self,
+        device_id: ResourceId,
+        rule_id: ResourceId,
+        duration: int,
+        *,
+        notify_every: int = 0,
+        active: bool = True,
+    ) -> JSONValue:
+        """Update Smart Leak without sending fields the portal intentionally omits."""
+        return self.update_usage_alert_rule(
+            device_id,
+            rule_id,
+            self.build_smart_leak_rule_payload(
+                duration,
+                notify_every=notify_every,
+                active=active,
+            ),
         )
 
     def update_portal_usage_alert_rule(
@@ -728,21 +927,58 @@ class FlumeClient:
         return self.get_budget(device_id, budget_id)
 
     def create_budget(self, device_id: ResourceId, payload: JSONDict) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "POST",
             self._user_path("/devices/{0}/budgets".format(device_id)),
             json=payload,
         )
 
+    @staticmethod
+    def build_budget_payload(
+        name: str,
+        budget_type: BudgetPeriod,
+        value: float,
+        *,
+        threshold_percentages: Sequence[float] = (75, 100),
+        recur_multiplier: int = 1,
+    ) -> JSONDict:
+        """Build a budget, converting portal percentages to absolute thresholds."""
+        return _build_budget_payload(
+            name,
+            budget_type,
+            value,
+            threshold_percentages=threshold_percentages,
+            recur_multiplier=recur_multiplier,
+        )
+
+    def create_budget_configured(
+        self,
+        device_id: ResourceId,
+        name: str,
+        budget_type: BudgetPeriod,
+        value: float,
+        *,
+        threshold_percentages: Sequence[float] = (75, 100),
+        recur_multiplier: int = 1,
+    ) -> JSONValue:
+        """Create a budget from user-facing portal percentage thresholds."""
+        return self.create_budget(
+            device_id,
+            self.build_budget_payload(
+                name,
+                budget_type,
+                value,
+                threshold_percentages=threshold_percentages,
+                recur_multiplier=recur_multiplier,
+            ),
+        )
+
     def create_portal_budget(
         self, device_id: ResourceId, payload: JSONDict
     ) -> JSONValue:
         """Create a budget through the portal's user-scoped device route."""
-        return self.data(
-            "POST",
-            self._user_path("/devices/{0}/budgets".format(device_id)),
-            json=payload,
-        )
+        return self.create_budget(device_id, payload)
 
     def update_budget(
         self,
@@ -750,10 +986,35 @@ class FlumeClient:
         budget_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
             json=payload,
+        )
+
+    def update_budget_configured(
+        self,
+        device_id: ResourceId,
+        budget_id: ResourceId,
+        name: str,
+        budget_type: BudgetPeriod,
+        value: float,
+        *,
+        threshold_percentages: Sequence[float] = (75, 100),
+        recur_multiplier: int = 1,
+    ) -> JSONValue:
+        """Update a budget from user-facing portal percentage thresholds."""
+        return self.update_budget(
+            device_id,
+            budget_id,
+            self.build_budget_payload(
+                name,
+                budget_type,
+                value,
+                threshold_percentages=threshold_percentages,
+                recur_multiplier=recur_multiplier,
+            ),
         )
 
     def update_portal_budget(
@@ -763,13 +1024,10 @@ class FlumeClient:
         payload: JSONDict,
     ) -> JSONValue:
         """Update a budget using the portal service's collection PATCH form."""
-        return self.data(
-            "PATCH",
-            self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
-            json=payload,
-        )
+        return self.update_budget(device_id, budget_id, payload)
 
     def delete_budget(self, device_id: ResourceId, budget_id: ResourceId) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "DELETE",
             self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
@@ -779,13 +1037,26 @@ class FlumeClient:
         self, device_id: ResourceId, budget_id: ResourceId
     ) -> JSONValue:
         """Delete a budget using the portal service's collection route."""
-        return self.data(
-            "DELETE",
-            self._user_path("/devices/{0}/budgets/{1}".format(device_id, budget_id)),
-        )
+        return self.delete_budget(device_id, budget_id)
 
     def list_subscriptions(self, **params: JSONValue) -> List[Subscription]:
         return self.list_all(self._user_path("/subscriptions"), params, Subscription)
+
+    def list_notification_subscriptions(self, **params: JSONValue) -> List[Subscription]:
+        """List ordinary (non-emergency) notification subscriptions."""
+        return [
+            subscription
+            for subscription in self.list_subscriptions(**params)
+            if not subscription.emergency_contact
+        ]
+
+    def list_emergency_contacts(self, **params: JSONValue) -> List[Subscription]:
+        """List emergency contacts modeled as location subscriptions."""
+        return [
+            subscription
+            for subscription in self.list_subscriptions(**params)
+            if subscription.emergency_contact
+        ]
 
     def list_portal_subscriptions(self, **params: JSONValue) -> List[Subscription]:
         """List subscriptions using the user-scoped route with portal auth data."""
@@ -809,10 +1080,23 @@ class FlumeClient:
         location_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "POST",
             self._user_path("/locations/{0}/subscriptions".format(location_id)),
             json=payload,
+        )
+
+    def create_emergency_contact(
+        self,
+        location_id: ResourceId,
+        contact_name: str,
+        email_address: str,
+    ) -> JSONValue:
+        """Create the email subscription shape used for an emergency contact."""
+        return self.create_location_subscription(
+            location_id,
+            _build_emergency_contact_payload(contact_name, email_address),
         )
 
     def create_portal_subscription(
@@ -821,19 +1105,47 @@ class FlumeClient:
         payload: JSONDict,
     ) -> JSONValue:
         """Create a subscription through the portal's user-scoped location route."""
-        return self.data(
-            "POST",
-            self._user_path("/locations/{0}/subscriptions".format(location_id)),
-            json=payload,
-        )
+        return self.create_location_subscription(location_id, payload)
 
     def update_subscription(
         self, subscription_id: ResourceId, payload: JSONDict
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             self._user_path("/subscriptions/{0}".format(subscription_id)),
             json=payload,
+        )
+
+    def set_subscription_notification_preference(
+        self,
+        subscription_id: ResourceId,
+        preference: NotificationPreference,
+        enabled: bool,
+    ) -> int:
+        """Toggle one known preference without dropping unknown bits such as live bit 64."""
+        self._require_capability("portal_writes")
+        subscription = self.get_subscription(subscription_id)
+        if subscription is None:
+            raise ValueError("subscription was not found")
+        updated_mask = set_notification_preference_bit(
+            subscription.notification_types,
+            preference,
+            enabled,
+        )
+        self.update_subscription(subscription_id, {"notification_types": updated_mask})
+        return updated_mask
+
+    def update_emergency_contact(
+        self,
+        subscription_id: ResourceId,
+        contact_name: str,
+        email_address: str,
+    ) -> JSONValue:
+        """Update an emergency-contact subscription with the portal payload."""
+        return self.update_subscription(
+            subscription_id,
+            _build_emergency_contact_payload(contact_name, email_address),
         )
 
     def update_portal_subscription(
@@ -842,22 +1154,21 @@ class FlumeClient:
         payload: JSONDict,
     ) -> JSONValue:
         """Update a subscription through the portal's collection PATCH form."""
-        return self.data(
-            "PATCH",
-            self._user_path("/subscriptions/{0}".format(subscription_id)),
-            json=payload,
-        )
+        return self.update_subscription(subscription_id, payload)
 
     def delete_subscription(self, subscription_id: ResourceId) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "DELETE", self._user_path("/subscriptions/{0}".format(subscription_id))
         )
+
+    def delete_emergency_contact(self, subscription_id: ResourceId) -> JSONValue:
+        """Delete an emergency contact through its subscription resource."""
+        return self.delete_subscription(subscription_id)
 
     def delete_portal_subscription(self, subscription_id: ResourceId) -> JSONValue:
         """Delete a subscription through the portal's collection route."""
-        return self.data(
-            "DELETE", self._user_path("/subscriptions/{0}".format(subscription_id))
-        )
+        return self.delete_subscription(subscription_id)
 
     def create_stripe_portal(self, return_url: str) -> JSONValue:
         return self.data(
@@ -923,6 +1234,54 @@ class FlumeClient:
             json=payload,
         )
 
+    @staticmethod
+    def build_do_not_alert_schedule_payload(
+        name: str,
+        start_time: str,
+        end_time: str,
+        weekdays: Sequence[Union[str, DoNotAlertWeekday]],
+        *,
+        interval: int = 1,
+        description: str = "",
+        span_types: Optional[Sequence[str]] = None,
+    ) -> JSONDict:
+        """Validate and build the weekly schedule model submitted by the portal."""
+        return _build_do_not_alert_schedule_payload(
+            name,
+            start_time,
+            end_time,
+            weekdays,
+            interval=interval,
+            description=description,
+            span_types=span_types,
+        )
+
+    def create_do_not_alert_schedule_configured(
+        self,
+        device_id: ResourceId,
+        name: str,
+        start_time: str,
+        end_time: str,
+        weekdays: Sequence[Union[str, DoNotAlertWeekday]],
+        *,
+        interval: int = 1,
+        description: str = "",
+        span_types: Optional[Sequence[str]] = None,
+    ) -> JSONValue:
+        """Create a validated weekly Do Not Alert schedule."""
+        return self.create_do_not_alert_schedule(
+            device_id,
+            self.build_do_not_alert_schedule_payload(
+                name,
+                start_time,
+                end_time,
+                weekdays,
+                interval=interval,
+                description=description,
+                span_types=span_types,
+            ),
+        )
+
     def create_portal_do_not_alert_schedule(
         self,
         device_id: ResourceId,
@@ -944,6 +1303,34 @@ class FlumeClient:
                 "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
             ),
             json=payload,
+        )
+
+    def update_do_not_alert_schedule_configured(
+        self,
+        device_id: ResourceId,
+        schedule_id: ResourceId,
+        name: str,
+        start_time: str,
+        end_time: str,
+        weekdays: Sequence[Union[str, DoNotAlertWeekday]],
+        *,
+        interval: int = 1,
+        description: str = "",
+        span_types: Optional[Sequence[str]] = None,
+    ) -> JSONValue:
+        """Update a validated weekly Do Not Alert schedule."""
+        return self.update_do_not_alert_schedule(
+            device_id,
+            schedule_id,
+            self.build_do_not_alert_schedule_payload(
+                name,
+                start_time,
+                end_time,
+                weekdays,
+                interval=interval,
+                description=description,
+                span_types=span_types,
+            ),
         )
 
     def update_portal_do_not_alert_schedule(
@@ -1073,11 +1460,18 @@ class FlumeClient:
     def grant_location_access(
         self, location_id: ResourceId, payload: JSONDict
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "POST",
             self._user_path("/locations/{0}/access".format(location_id)),
             json=payload,
         )
+
+    def share_location(self, location_id: ResourceId, email_address: str) -> JSONValue:
+        """Grant shared location access using the portal's email payload."""
+        if not email_address or "@" not in email_address:
+            raise ValueError("email_address must look like an email address")
+        return self.grant_location_access(location_id, {"email_address": email_address})
 
     def grant_portal_location_access(
         self,
@@ -1092,10 +1486,17 @@ class FlumeClient:
         location_id: ResourceId,
         access_id: ResourceId,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "DELETE",
             self._user_path("/locations/{0}/access/{1}".format(location_id, access_id)),
         )
+
+    def unshare_location(
+        self, location_id: ResourceId, access_id: ResourceId
+    ) -> JSONValue:
+        """Revoke a shared-access record."""
+        return self.revoke_location_access(location_id, access_id)
 
     def revoke_portal_location_access(
         self,
@@ -1277,6 +1678,7 @@ class FlumeClient:
         span_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             self._user_path("/devices/{0}/spans/{1}".format(device_id, span_id)),
@@ -1291,6 +1693,15 @@ class FlumeClient:
     ) -> JSONValue:
         """Set a span's type using the portal's exact payload shape."""
         return self.update_span(device_id, span_id, {"type": span_type})
+
+    def relabel_span(
+        self,
+        device_id: ResourceId,
+        span_id: ResourceId,
+        span_type: str,
+    ) -> JSONValue:
+        """Relabel a disaggregation span using the portal's PATCH `{type}` payload."""
+        return self.update_span_type(device_id, span_id, span_type)
 
     def list_span_types(
         self, location_id: ResourceId, **params: JSONValue
@@ -1467,9 +1878,14 @@ class FlumeClient:
             ),
         )
 
+    def check_meter_accuracy(self, device_id: ResourceId) -> List[AccuracyResult]:
+        """Return the typed meter-accuracy precheck shown by the portal."""
+        return self.get_meter_accuracy(device_id)
+
     def submit_meter_accuracy(
         self, device_id: ResourceId, payload: JSONDict
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "POST",
             self._user_path("/devices/{0}/meters/accuracy".format(device_id)),
@@ -1502,6 +1918,7 @@ class FlumeClient:
         )
 
     def initiate_accuracy_conversation(self, payload: JSONDict) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "POST", self._user_path("/initiate-accuracy-conversation"), json=payload
         )

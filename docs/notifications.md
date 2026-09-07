@@ -68,5 +68,47 @@ capability. These write routes have not been live-mutated as part of the
 read-only validation, so the generated reference documents their current
 implementation without claiming they were write-tested.
 
+## Notification preferences
+
+Portal notification subscriptions store their enabled categories in one integer
+bitmask. `NotificationPreference` names the bits currently present in the web
+portal: Usage Alert (`1`), Budget (`2`), General (`4`), Connection (`8`),
+Battery (`16`), and Device Moved (`32`). A live subscription used mask `127`,
+which includes an additional currently unnamed bit `64`. PyFlumeNG therefore
+never reconstructs the whole mask from the known enum.
+
+```python
+subscription = client.list_notification_subscriptions()[0]
+print(subscription.unknown_notification_bits)  # preserves e.g. 64
+
+client.set_subscription_notification_preference(
+    subscription.id,
+    pyflumeng.NotificationPreference.BATTERY,
+    False,
+)
+```
+
+`set_subscription_notification_preference()` first reads the current mask,
+changes only the selected known bit, and PATCHes the resulting integer. Unknown
+bits remain untouched. Subscription mutations require `PortalAuth`.
+
+## Usage-alert notification detail
+
+Usage-alert notifications may contain `extra.query` with `bucket`,
+`since_datetime`, `until_datetime`, and `tz`. The portal re-runs that window
+through the device query endpoint with `operation="AVG"` and
+`units="GALLONS"`. PyFlumeNG exposes the same behavior:
+
+```python
+detail = client.get_notification_usage_detail(notification)
+if detail is not None:
+    print(detail.average_gpm, detail.duration_minutes)
+```
+
+`build_notification_usage_query()` exposes the exact query payload without
+sending it. `get_notification_usage_detail()` returns a typed
+`NotificationUsageDetail`; sparse budget/general notifications with no usable
+query return `None` rather than inventing values.
+
 All exact signatures and return types are generated in the
 [API reference](api-reference.md).

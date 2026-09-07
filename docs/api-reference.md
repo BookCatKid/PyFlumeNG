@@ -105,7 +105,13 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
   Delete a notification through the portal's user-scoped route.
 - `set_notification_read(notification_id: ResourceId, read: bool = True, portal: bool = True) -> JSONValue`
   Set notification read state using the portal's frontend payload.
+- `build_notification_usage_query(notification: Notification, units: str = 'GALLONS') -> Optional[JSONDict]`
+  Build the portal's AVG re-query for a usage-alert notification.
+- `get_notification_usage_detail(notification: Union[Notification, ResourceId], units: str = 'GALLONS') -> Optional[NotificationUsageDetail]`
+  Re-query one usage notification and return portal-style AVG detail.
 - `list_usage_alerts(**params: JSONValue) -> List[UsageAlert]`
+- `list_usage_alert_history(**params: JSONValue) -> List[UsageAlert]`
+  Return structured triggered usage-alert history from the user feed.
 - `list_event_rules(device_id: ResourceId, **params: JSONValue) -> List[UsageAlertRule]`
 - `list_usage_alert_rules(device_id: ResourceId, **params: JSONValue) -> List[UsageAlertRule]`
 - `list_portal_usage_alert_rules(device_id: ResourceId, **params: JSONValue) -> List[UsageAlertRule]`
@@ -114,9 +120,19 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `get_portal_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId) -> Optional[UsageAlertRule]`
   Fetch one usage rule using the user-scoped route with portal auth.
 - `create_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `build_usage_alert_rule_payload(name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None, advanced_low_flow: bool = False) -> JSONDict`
+  Validate and build the customer portal's usage-alert rule payload.
+- `create_usage_alert_rule_configured(device_id: ResourceId, name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None) -> JSONValue`
+  Create a validated custom rule without requiring callers to shape JSON.
+- `build_smart_leak_rule_payload(duration: int, *, notify_every: int = 0, active: bool = True) -> JSONDict`
+  Build the restricted edit payload used for Flume's Smart Leak rule.
 - `create_portal_usage_alert_rule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a rule through the portal's user-scoped device route.
 - `update_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `update_usage_alert_rule_configured(device_id: ResourceId, rule_id: ResourceId, name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None) -> JSONValue`
+  Update a validated custom rule using the portal's editable fields.
+- `update_smart_leak_rule_configured(device_id: ResourceId, rule_id: ResourceId, duration: int, *, notify_every: int = 0, active: bool = True) -> JSONValue`
+  Update Smart Leak without sending fields the portal intentionally omits.
 - `update_portal_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a rule using the portal service's collection PATCH form.
 - `delete_usage_alert_rule(device_id: ResourceId, rule_id: ResourceId) -> JSONValue`
@@ -138,27 +154,45 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `get_portal_budget(device_id: ResourceId, budget_id: ResourceId) -> Optional[Budget]`
   Fetch one budget using the user-scoped route with portal auth.
 - `create_budget(device_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `build_budget_payload(name: str, budget_type: BudgetPeriod, value: float, *, threshold_percentages: Sequence[float] = (75, 100), recur_multiplier: int = 1) -> JSONDict`
+  Build a budget, converting portal percentages to absolute thresholds.
+- `create_budget_configured(device_id: ResourceId, name: str, budget_type: BudgetPeriod, value: float, *, threshold_percentages: Sequence[float] = (75, 100), recur_multiplier: int = 1) -> JSONValue`
+  Create a budget from user-facing portal percentage thresholds.
 - `create_portal_budget(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a budget through the portal's user-scoped device route.
 - `update_budget(device_id: ResourceId, budget_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `update_budget_configured(device_id: ResourceId, budget_id: ResourceId, name: str, budget_type: BudgetPeriod, value: float, *, threshold_percentages: Sequence[float] = (75, 100), recur_multiplier: int = 1) -> JSONValue`
+  Update a budget from user-facing portal percentage thresholds.
 - `update_portal_budget(device_id: ResourceId, budget_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a budget using the portal service's collection PATCH form.
 - `delete_budget(device_id: ResourceId, budget_id: ResourceId) -> JSONValue`
 - `delete_portal_budget(device_id: ResourceId, budget_id: ResourceId) -> JSONValue`
   Delete a budget using the portal service's collection route.
 - `list_subscriptions(**params: JSONValue) -> List[Subscription]`
+- `list_notification_subscriptions(**params: JSONValue) -> List[Subscription]`
+  List ordinary (non-emergency) notification subscriptions.
+- `list_emergency_contacts(**params: JSONValue) -> List[Subscription]`
+  List emergency contacts modeled as location subscriptions.
 - `list_portal_subscriptions(**params: JSONValue) -> List[Subscription]`
   List subscriptions using the user-scoped route with portal auth data.
 - `get_subscription(subscription_id: ResourceId) -> Optional[Subscription]`
 - `get_portal_subscription(subscription_id: ResourceId) -> Optional[Subscription]`
   Fetch a subscription using the user-scoped route with portal auth.
 - `create_location_subscription(location_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `create_emergency_contact(location_id: ResourceId, contact_name: str, email_address: str) -> JSONValue`
+  Create the email subscription shape used for an emergency contact.
 - `create_portal_subscription(location_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a subscription through the portal's user-scoped location route.
 - `update_subscription(subscription_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `set_subscription_notification_preference(subscription_id: ResourceId, preference: NotificationPreference, enabled: bool) -> int`
+  Toggle one known preference without dropping unknown bits such as live bit 64.
+- `update_emergency_contact(subscription_id: ResourceId, contact_name: str, email_address: str) -> JSONValue`
+  Update an emergency-contact subscription with the portal payload.
 - `update_portal_subscription(subscription_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a subscription through the portal's collection PATCH form.
 - `delete_subscription(subscription_id: ResourceId) -> JSONValue`
+- `delete_emergency_contact(subscription_id: ResourceId) -> JSONValue`
+  Delete an emergency contact through its subscription resource.
 - `delete_portal_subscription(subscription_id: ResourceId) -> JSONValue`
   Delete a subscription through the portal's collection route.
 - `create_stripe_portal(return_url: str) -> JSONValue`
@@ -171,9 +205,15 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `get_portal_do_not_alert_schedule(device_id: ResourceId, schedule_id: ResourceId) -> Optional[DoNotAlertSchedule]`
   Fetch one DNA schedule using the portal-compatible user route.
 - `create_do_not_alert_schedule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `build_do_not_alert_schedule_payload(name: str, start_time: str, end_time: str, weekdays: Sequence[Union[str, DoNotAlertWeekday]], *, interval: int = 1, description: str = '', span_types: Optional[Sequence[str]] = None) -> JSONDict`
+  Validate and build the weekly schedule model submitted by the portal.
+- `create_do_not_alert_schedule_configured(device_id: ResourceId, name: str, start_time: str, end_time: str, weekdays: Sequence[Union[str, DoNotAlertWeekday]], *, interval: int = 1, description: str = '', span_types: Optional[Sequence[str]] = None) -> JSONValue`
+  Create a validated weekly Do Not Alert schedule.
 - `create_portal_do_not_alert_schedule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a DNA schedule using the portal payload.
 - `update_do_not_alert_schedule(device_id: ResourceId, schedule_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `update_do_not_alert_schedule_configured(device_id: ResourceId, schedule_id: ResourceId, name: str, start_time: str, end_time: str, weekdays: Sequence[Union[str, DoNotAlertWeekday]], *, interval: int = 1, description: str = '', span_types: Optional[Sequence[str]] = None) -> JSONValue`
+  Update a validated weekly Do Not Alert schedule.
 - `update_portal_do_not_alert_schedule(device_id: ResourceId, schedule_id: ResourceId, payload: JSONDict) -> JSONValue`
   Update a DNA schedule using the portal collection PATCH form.
 - `delete_do_not_alert_schedule(device_id: ResourceId, schedule_id: ResourceId) -> JSONValue`
@@ -190,9 +230,13 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `get_portal_location_access(location_id: ResourceId, access_id: ResourceId) -> Optional[LocationAccess]`
   Fetch a sharing record using the user-scoped route with portal auth.
 - `grant_location_access(location_id: ResourceId, payload: JSONDict) -> JSONValue`
+- `share_location(location_id: ResourceId, email_address: str) -> JSONValue`
+  Grant shared location access using the portal's email payload.
 - `grant_portal_location_access(location_id: ResourceId, payload: JSONDict) -> JSONValue`
   Grant sharing access through the portal's user-scoped location route.
 - `revoke_location_access(location_id: ResourceId, access_id: ResourceId) -> JSONValue`
+- `unshare_location(location_id: ResourceId, access_id: ResourceId) -> JSONValue`
+  Revoke a shared-access record.
 - `revoke_portal_location_access(location_id: ResourceId, access_id: ResourceId) -> JSONValue`
   Revoke sharing access through the portal's user-scoped route.
 - `list_integrations(device_id: ResourceId, **params: JSONValue) -> List[Integration]`
@@ -214,6 +258,8 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `update_span(device_id: ResourceId, span_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `update_span_type(device_id: ResourceId, span_id: ResourceId, span_type: str) -> JSONValue`
   Set a span's type using the portal's exact payload shape.
+- `relabel_span(device_id: ResourceId, span_id: ResourceId, span_type: str) -> JSONValue`
+  Relabel a disaggregation span using the portal's PATCH `{type}` payload.
 - `list_span_types(location_id: ResourceId, **params: JSONValue) -> List[SpanType]`
 - `get_usage_breakdown(device_id: ResourceId, since_datetime: str, until_datetime: str, units: str = 'gallons', span_types: Optional[Sequence[str]] = None, location_id: Optional[ResourceId] = None) -> UsageBreakdown`
   Aggregate classified spans into portal-style usage categories.
@@ -221,6 +267,8 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `submit_device_feedback(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Submit device feedback through the portal route.
 - `get_meter_accuracy(device_id: ResourceId) -> List[AccuracyResult]`
+- `check_meter_accuracy(device_id: ResourceId) -> List[AccuracyResult]`
+  Return the typed meter-accuracy precheck shown by the portal.
 - `submit_meter_accuracy(device_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `submit_meter_accuracy_readings(device_id: ResourceId, since_datetime: str, until_datetime: str, since_reading: float, until_reading: float, since_image: str, until_image: str, units: str) -> JSONValue`
   Submit the portal meter-accuracy form payload.
@@ -318,6 +366,62 @@ Track a baseline and the latest server-advertised quota.
   Update values from standard Flume rate-limit headers.
 - `to_dict() -> Dict[str, Optional[Union[int, str]]]`
   Return serializable rate-limit state.
+
+## Portal semantic helpers
+
+### `NotificationPreference`
+
+Known notification-subscription bits used by the current portal.
+
+| Name | Value |
+| --- | --- |
+| `USAGE_ALERT` | `1` |
+| `BUDGET` | `2` |
+| `GENERAL` | `4` |
+| `CONNECTION` | `8` |
+| `BATTERY` | `16` |
+| `DEVICE_MOVED` | `32` |
+
+### `DoNotAlertWeekday`
+
+Weekday keys used by the portal's weekly Do Not Alert form.
+
+| Name | Value |
+| --- | --- |
+| `SUNDAY` | `'SU'` |
+| `MONDAY` | `'MO'` |
+| `TUESDAY` | `'TU'` |
+| `WEDNESDAY` | `'WE'` |
+| `THURSDAY` | `'TH'` |
+| `FRIDAY` | `'FR'` |
+| `SATURDAY` | `'SA'` |
+
+### `BudgetPeriod`
+
+Budget recurrence types exposed by the customer portal.
+
+| Name | Value |
+| --- | --- |
+| `DAILY` | `'DAILY'` |
+| `WEEKLY` | `'WEEKLY'` |
+| `MONTHLY` | `'MONTHLY'` |
+
+### Payload and bitmask helpers
+
+- `unknown_notification_preference_bits(mask: int) -> int`
+  Return subscription bits not named by the current portal bundle.
+- `set_notification_preference_bit(mask: int, preference: NotificationPreference, enabled: bool) -> int`
+  Toggle one known preference while preserving every unrelated/unknown bit.
+- `build_usage_alert_rule_payload(name: str, flow_rate: float, duration: int, *, notify_every: int = 0, active: bool = True, shutoff_active: Optional[bool] = None, advanced_low_flow: bool = False) -> JSONDict`
+  Build a portal-valid usage-alert rule payload.
+- `build_smart_leak_rule_payload(duration: int, *, notify_every: int = 0, active: bool = True) -> JSONDict`
+  Build only the fields the portal edits on its built-in Smart Leak rule.
+- `build_do_not_alert_schedule_payload(name: str, start_time: str, end_time: str, weekdays: Sequence[object], *, interval: int = 1, description: str = '', span_types: Optional[Sequence[str]] = None) -> JSONDict`
+  Build the weekly schedule object submitted by the portal form.
+- `build_budget_payload(name: str, budget_type: BudgetPeriod, value: float, *, threshold_percentages: Sequence[float] = (75, 100), recur_multiplier: int = 1) -> JSONDict`
+  Build a budget payload using the portal's percentage-to-usage conversion.
+- `build_emergency_contact_payload(contact_name: str, email_address: str) -> JSONDict`
+  Build the exact subscription payload used for portal emergency contacts.
 
 ## Resource models
 
@@ -507,6 +611,8 @@ Query metadata embedded in notification ``extra`` payloads.
 | `since_datetime` | `str` |
 | `tz` | `str` |
 | `until_datetime` | `str` |
+| `operation` | `Optional[str]` |
+| `units` | `Optional[str]` |
 
 ### `NotificationExtra`
 
@@ -521,6 +627,18 @@ Known fields in the portal notification ``extra`` object.
 | `percentage` | `Optional[int]` |
 | `query` | `Optional[NotificationQuery]` |
 
+### `UsageAlertQuery`
+
+Query window stored on a triggered usage-alert history item.
+
+| Field | Type |
+| --- | --- |
+| `request_id` | `str` |
+| `bucket` | `str` |
+| `since_datetime` | `str` |
+| `until_datetime` | `str` |
+| `tz` | `str` |
+
 ### `UsageAlert`
 
 Triggered usage-alert event.
@@ -531,8 +649,26 @@ Triggered usage-alert event.
 | `device_id` | `Optional[ResourceId]` |
 | `triggered_datetime` | `Optional[str]` |
 | `flume_leak` | `bool` |
-| `query` | `JSONValue` |
+| `query` | `Optional[UsageAlertQuery]` |
 | `event_rule_name` | `Optional[str]` |
+
+### `NotificationUsageDetail`
+
+Portal-style AVG re-query details for a usage-alert notification.
+
+| Field | Type |
+| --- | --- |
+| `notification_id` | `Optional[ResourceId]` |
+| `device_id` | `Optional[ResourceId]` |
+| `request_id` | `str` |
+| `bucket` | `str` |
+| `since_datetime` | `str` |
+| `until_datetime` | `str` |
+| `tz` | `str` |
+| `units` | `str` |
+| `duration_minutes` | `Optional[float]` |
+| `average_gpm` | `Optional[float]` |
+| `values` | `List[float]` |
 
 ### `QueryResult`
 
@@ -606,6 +742,15 @@ Daily, weekly, or monthly water budget.
 | `end_date` | `Optional[str]` |
 | `recur_multiplier` | `Optional[int]` |
 
+### `SubscriptionAlertInfo`
+
+Delivery target nested in a subscription, such as an email address.
+
+| Field | Type |
+| --- | --- |
+| `type` | `str` |
+| `info` | `str` |
+
 ### `Subscription`
 
 Notification subscription or emergency contact.
@@ -615,7 +760,7 @@ Notification subscription or emergency contact.
 | `id` | `Optional[ResourceId]` |
 | `user_id` | `Optional[ResourceId]` |
 | `alert_type` | `Optional[str]` |
-| `alert_info` | `JSONValue` |
+| `alert_info` | `Optional[SubscriptionAlertInfo]` |
 | `device_id` | `Optional[ResourceId]` |
 | `notification_types` | `int` |
 | `created_datetime` | `Optional[str]` |
@@ -832,7 +977,17 @@ Appliance/profile metadata returned by ``/location-profiles``.
 
 | Field | Type |
 | --- | --- |
-| `residents` | `JSONValue` |
-| `bathrooms` | `JSONValue` |
-| `indoor` | `List[JSONValue]` |
-| `outdoor` | `List[JSONValue]` |
+| `residents` | `Optional['LocationProfileField']` |
+| `bathrooms` | `Optional['LocationProfileField']` |
+| `indoor` | `List['LocationProfileField']` |
+| `outdoor` | `List['LocationProfileField']` |
+
+### `LocationProfileField`
+
+One field descriptor returned by the root location-profile metadata.
+
+| Field | Type |
+| --- | --- |
+| `field` | `str` |
+| `display` | `str` |
+| `default` | `JSONValue` |

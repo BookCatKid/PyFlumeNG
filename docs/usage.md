@@ -79,4 +79,30 @@ shutoff configuration) enforce the `portal_writes` capability before sending a
 request, so an accidental `PersonalAuth` write fails locally with
 `FlumeCapabilityError`.
 
+## Structured alert history
+
+`client.list_usage_alert_history()` is the typed form of
+`GET /users/{user_id}/usage-alerts`. Each `UsageAlert` includes a nested
+`UsageAlertQuery` with the stored request ID, bucket, local since/until strings,
+and timezone, plus a `duration_minutes` convenience property when the timestamps
+are parseable.
+
+## Validated rule payloads
+
+For custom rules, `build_usage_alert_rule_payload()` and the configured
+create/update helpers enforce the current portal form: a 1–32 character name,
+flow rate from 0 through 40.9 gallons/minute, duration from 5 through 1439
+minutes, and repeat notification interval from 0 through 20100 minutes.
+
+The built-in Smart Leak rule is deliberately different. The portal does not
+send `name`, `flow_rate`, or `shutoff_config` when editing an
+`advanced_low_flow` rule. Use `build_smart_leak_rule_payload()` or
+`update_smart_leak_rule_configured()` to avoid sending those fields.
+
+For Do Not Alert schedules,
+`build_do_not_alert_schedule_payload()`/the configured CRUD helpers accept
+weekdays `SU` through `SA`, normalize times to `HH:mm:ss`, require at least four
+minutes between start and end, and constrain weekly interval to 1–10. Empty
+`span_types` is omitted exactly like the portal form.
+
 See the [API reference](api-reference.md) for every method and return type.

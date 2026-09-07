@@ -23,6 +23,22 @@ PUBLIC_CLASSES = (
     ("pyflumeng/rate_limit.py", ("RateLimitState",)),
 )
 
+SEMANTIC_ENUMS = (
+    "NotificationPreference",
+    "DoNotAlertWeekday",
+    "BudgetPeriod",
+)
+
+SEMANTIC_FUNCTIONS = (
+    "unknown_notification_preference_bits",
+    "set_notification_preference_bit",
+    "build_usage_alert_rule_payload",
+    "build_smart_leak_rule_payload",
+    "build_do_not_alert_schedule_payload",
+    "build_budget_payload",
+    "build_emergency_contact_payload",
+)
+
 
 def _expr(node: Optional[ast.expr]) -> str:
     return ast.unparse(node) if node is not None else ""
@@ -140,6 +156,28 @@ def _model_fields(node: ast.ClassDef) -> list[tuple[str, str]]:
     return fields
 
 
+def _enum_values(node: ast.ClassDef) -> list[tuple[str, str]]:
+    values: list[tuple[str, str]] = []
+    for item in node.body:
+        if (
+            isinstance(item, ast.Assign)
+            and len(item.targets) == 1
+            and isinstance(item.targets[0], ast.Name)
+            and not item.targets[0].id.startswith("_")
+        ):
+            values.append((item.targets[0].id, _expr(item.value)))
+    return values
+
+
+def _function_nodes(path: Path) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
 def generate() -> str:
     lines = [
         "# API reference",
@@ -155,6 +193,28 @@ def generate() -> str:
         classes = _class_nodes(ROOT / relative_path)
         for name in names:
             lines.extend(_render_class(name, classes[name]))
+
+    lines.extend(["## Portal semantic helpers", ""])
+    semantics_path = ROOT / "pyflumeng" / "semantics.py"
+    semantic_classes = _class_nodes(semantics_path)
+    for name in SEMANTIC_ENUMS:
+        node = semantic_classes[name]
+        lines.extend([f"### `{name}`", ""])
+        if _first_line(node):
+            lines.extend([_first_line(node), ""])
+        lines.extend(["| Name | Value |", "| --- | --- |"])
+        for member, value in _enum_values(node):
+            lines.append(f"| `{member}` | `{value}` |")
+        lines.append("")
+
+    semantic_functions = _function_nodes(semantics_path)
+    lines.extend(["### Payload and bitmask helpers", ""])
+    for name in SEMANTIC_FUNCTIONS:
+        node = semantic_functions[name]
+        lines.append(f"- `{name}{_signature(node)}`")
+        if _first_line(node):
+            lines.append(f"  {_first_line(node)}")
+    lines.append("")
 
     lines.extend(
         [

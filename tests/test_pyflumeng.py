@@ -8,18 +8,28 @@ import pytest
 from pyflumeng import (
     AccuracyResult,
     Budget,
+    BudgetPeriod,
     Device,
     DoNotAlertSchedule,
+    DoNotAlertWeekday,
     FlumeClient,
     FlumeData,
+    FlumeModel,
     FlumeNotificationList,
     FlumePortalAuth,
     FlumeResponse,
     FlumeUsageAlertList,
+    LocationProfileField,
+    LocationProfiles,
     Notification,
+    NotificationPreference,
+    NotificationUsageDetail,
     PersonalAuth,
     Span,
     SpanDataPoint,
+    Subscription,
+    UsageAlert,
+    UsageAlertQuery,
     UsageAlertRule,
     UsageAlertSchedule,
     UsageBreakdown,
@@ -557,10 +567,12 @@ def test_usage_breakdown_matches_live_portal_rollup_and_total_query(requests_moc
 def test_portal_accuracy_payload_wrapper(requests_mock):
     """The accuracy helper constructs the same fields as the portal form."""
     requests_mock.post(
-        API_BASE_URL + "/users/12345/devices/device/meters/accuracy",
+        PORTAL_API_URL + "/users/12345/devices/device/meters/accuracy",
         json={"success": True, "data": []},
     )
-    client = FlumeClient(auth())
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
 
     client.submit_meter_accuracy_readings(
         "device",
@@ -1079,3 +1091,362 @@ def test_list_spans_rejects_string_span_types(requests_mock):
             "2026-09-06 11:00:00",
             span_types="OUTDOOR",  # type: ignore[arg-type]
         )
+
+
+def test_nested_model_mappings_are_isolated_from_flume_model_base():
+    """Forward-declared nested mappings must never contaminate unrelated models."""
+    from pyflumeng import User
+
+    assert FlumeModel.nested == {}
+    assert User.nested == {"plan": User.nested["plan"]}
+    assert Notification.nested == {"extra": Notification.nested["extra"]}
+    assert Span.nested == {"data": SpanDataPoint}
+
+
+def test_notification_preferences_preserve_unknown_live_bits(requests_mock):
+    """Toggling a known bit keeps the live unnamed bit 64 intact."""
+    url = PORTAL_API_URL + "/users/12345/subscriptions/sub"
+    requests_mock.get(
+        url,
+        json={
+            "success": True,
+            "data": [
+                {
+                    "id": "sub",
+                    "alert_type": "EMAIL",
+                    "notification_types": 127,
+                    "emergency_contact": False,
+                }
+            ],
+        },
+    )
+    requests_mock.patch(url, json={"success": True, "data": []})
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    mask = client.set_subscription_notification_preference(
+        "sub", NotificationPreference.BATTERY, False
+    )
+
+    assert mask == 111
+    assert mask & 64 == 64
+    assert requests_mock.last_request.json() == {"notification_types": 111}
+    subscription = Subscription({"notification_types": 127})
+    assert subscription.unknown_notification_bits == 64
+    subscription.set_notification_preference(NotificationPreference.DEVICE_MOVED, False)
+    assert subscription.notification_types == 95
+    assert subscription.unknown_notification_bits == 64
+
+
+def test_usage_alert_history_has_typed_query_windows(requests_mock):
+    """The user usage-alert feed exposes its nested query as a typed model."""
+    url = PORTAL_API_URL + "/users/12345/usage-alerts"
+    requests_mock.get(
+        url,
+        json={
+            "success": True,
+            "data": [
+                {
+                    "id": 7,
+                    "device_id": "device",
+                    "triggered_datetime": "2026-09-06T20:15:00.000Z",
+                    "flume_leak": True,
+                    "event_rule_name": "High Flow",
+                    "query": {
+                        "request_id": "alert",
+                        "bucket": "MIN",
+                        "since_datetime": "2026-09-06 13:00:00",
+                        "until_datetime": "2026-09-06 13:30:00",
+                        "tz": "America/Los_Angeles",
+                    },
+                }
+            ],
+        },
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    history = client.list_usage_alert_history()
+
+    assert isinstance(history[0], UsageAlert)
+    assert isinstance(history[0].query, UsageAlertQuery)
+    assert history[0].query.duration_minutes == 30
+    assert history[0].event_rule_name == "High Flow"
+
+
+def test_notification_usage_detail_matches_portal_avg_requery(requests_mock):
+    """Usage notifications are enriched with the audited AVG query protocol."""
+    query_url = PORTAL_API_URL + "/users/12345/devices/device/query"
+    requests_mock.post(
+        query_url,
+        json={
+            "success": True,
+            "data": [{"notification_detail": [{"value": 6.54}]}],
+        },
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+    notification = Notification(
+        {
+            "id": "notice",
+            "device_id": "device",
+            "extra": {
+                "advanced_low_flow": False,
+                "event_rule_name": "High Flow",
+                "query": {
+                    "request_id": "stored-request",
+                    "bucket": "MIN",
+                    "since_datetime": "2026-09-06 13:00:00",
+                    "until_datetime": "2026-09-06 13:30:00",
+                    "tz": "America/Los_Angeles",
+                },
+            },
+        }
+    )
+
+    detail = client.get_notification_usage_detail(notification)
+
+    assert isinstance(detail, NotificationUsageDetail)
+    assert detail.average_gpm == 6.54
+    assert detail.duration_minutes == 30
+    assert detail.tz == "America/Los_Angeles"
+    assert requests_mock.last_request.json() == {
+        "queries": [
+            {
+                "request_id": "notification_detail",
+                "bucket": "MIN",
+                "since_datetime": "2026-09-06 13:00:00",
+                "until_datetime": "2026-09-06 13:30:00",
+                "operation": "AVG",
+                "units": "GALLONS",
+            }
+        ]
+    }
+
+
+def test_notification_usage_detail_is_safe_for_sparse_notification():
+    """Budget/general notifications without a usage query do not trigger re-query work."""
+    client = FlumeClient(auth())
+    notification = Notification(
+        {"id": "budget", "extra": {"budget_type": "MONTHLY", "percentage": 90}}
+    )
+
+    assert client.build_notification_usage_query(notification) is None
+    assert client.get_notification_usage_detail(notification) is None
+
+
+def test_usage_rule_payload_builder_validates_portal_limits_and_smart_leak_fields():
+    """Rule helpers enforce the current portal form and Smart Leak edit semantics."""
+    payload = FlumeClient.build_usage_alert_rule_payload(
+        "Irrigation",
+        4.5,
+        10,
+        notify_every=1440,
+        shutoff_active=True,
+    )
+    assert payload == {
+        "active": True,
+        "duration": 10,
+        "notify_every": 1440,
+        "advanced_low_flow": False,
+        "name": "Irrigation",
+        "flow_rate": 4.5,
+        "shutoff_config": {"active": True},
+    }
+
+    smart = FlumeClient.build_smart_leak_rule_payload(30, notify_every=60)
+    assert smart == {
+        "active": True,
+        "duration": 30,
+        "notify_every": 60,
+        "advanced_low_flow": True,
+    }
+    assert "name" not in smart
+    assert "flow_rate" not in smart
+    assert "shutoff_config" not in smart
+
+    with pytest.raises(ValueError, match="32"):
+        FlumeClient.build_usage_alert_rule_payload("x" * 33, 1, 10)
+    with pytest.raises(ValueError, match="40.9"):
+        FlumeClient.build_usage_alert_rule_payload("Rule", 41, 10)
+    with pytest.raises(ValueError, match="1439"):
+        FlumeClient.build_usage_alert_rule_payload("Rule", 1, 4)
+
+
+def test_do_not_alert_builder_matches_weekly_portal_model_and_omits_empty_spans():
+    """DNA builder validates times/days and reproduces the portal schedule model."""
+    payload = FlumeClient.build_do_not_alert_schedule_payload(
+        "Watering",
+        "04:00",
+        "06:00:00",
+        [DoNotAlertWeekday.SUNDAY, "TU"],
+        interval=2,
+    )
+    assert payload == {
+        "name": "Watering",
+        "description": "",
+        "start_time": "04:00:00",
+        "end_time": "06:00:00",
+        "rrule_obj": {
+            "tzid": "",
+            "dtstart": "",
+            "freq": "WEEKLY",
+            "interval": 2,
+            "byweekday": ["SU", "TU"],
+            "byhour": 0,
+            "byminute": 0,
+            "bysecond": 0,
+        },
+    }
+    assert "span_types" not in payload
+
+    with pytest.raises(ValueError, match="4 minutes"):
+        FlumeClient.build_do_not_alert_schedule_payload(
+            "Too short", "04:00", "04:03", ["MO"]
+        )
+    with pytest.raises(ValueError, match="1 and 10"):
+        FlumeClient.build_do_not_alert_schedule_payload(
+            "Bad repeat", "04:00", "06:00", ["MO"], interval=11
+        )
+    with pytest.raises(ValueError, match="weekdays"):
+        FlumeClient.build_do_not_alert_schedule_payload(
+            "Bad day", "04:00", "06:00", ["XX"]
+        )
+
+
+def test_budget_payload_uses_portal_percentage_conversion():
+    """Budget UX stays percentage-based while API thresholds remain absolute usage."""
+    payload = FlumeClient.build_budget_payload(
+        "Monthly Budget",
+        BudgetPeriod.MONTHLY,
+        18700,
+        threshold_percentages=(90, 100),
+    )
+
+    assert payload == {
+        "name": "Monthly Budget",
+        "type": "MONTHLY",
+        "value": 18700.0,
+        "thresholds": [16830, 18700],
+        "recur_multiplier": 1,
+    }
+    budget = Budget({"value": 18700, "thresholds": [16830, 18700]})
+    assert budget.threshold_percentages == [90, 100]
+
+    # JavaScript Math.round(2.5) is 3; Python round(2.5) would be 2.
+    tie = FlumeClient.build_budget_payload(
+        "Tie",
+        BudgetPeriod.DAILY,
+        10,
+        threshold_percentages=(25,),
+    )
+    assert tie["thresholds"] == [3]
+
+
+def test_emergency_contacts_shared_access_relabel_profiles_and_accuracy_are_unprefixed(
+    requests_mock,
+):
+    """Audited portal resources have straightforward unprefixed typed helpers."""
+    subscriptions = PORTAL_API_URL + "/users/12345/subscriptions"
+    requests_mock.get(
+        subscriptions,
+        json={
+            "success": True,
+            "data": [
+                {"id": "normal", "notification_types": 127},
+                {
+                    "id": "emergency",
+                    "notification_types": 1,
+                    "emergency_contact": True,
+                    "contact_name": "Helper",
+                    "alert_info": {"type": "email", "info": "helper@example.com"},
+                },
+            ],
+        },
+    )
+    requests_mock.post(
+        PORTAL_API_URL + "/users/12345/locations/location/subscriptions",
+        json={"success": True, "data": []},
+    )
+    requests_mock.post(
+        PORTAL_API_URL + "/users/12345/locations/location/access",
+        json={"success": True, "data": []},
+    )
+    requests_mock.patch(
+        PORTAL_API_URL + "/users/12345/devices/device/spans/span",
+        json={"success": True, "data": []},
+    )
+    requests_mock.get(
+        PORTAL_API_URL + "/location-profiles",
+        json={
+            "success": True,
+            "data": [
+                {
+                    "residents": {"display": "Residents"},
+                    "bathrooms": {"display": "Bathrooms"},
+                    "indoor": [
+                        {"field": "toilet", "display": "Toilet", "default": True}
+                    ],
+                    "outdoor": [],
+                }
+            ],
+        },
+    )
+    requests_mock.get(
+        PORTAL_API_URL + "/users/12345/devices/device/meters/accuracy",
+        json={"success": True, "data": [{"type": "ACCURACY"}]},
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    contacts = client.list_emergency_contacts()
+    assert contacts[0].contact_name == "Helper"
+    assert contacts[0].alert_info.info == "helper@example.com"
+    client.create_emergency_contact("location", "Helper", "helper@example.com")
+    assert requests_mock.last_request.json() == {
+        "contact_name": "Helper",
+        "alert_info": {"type": "email", "info": "helper@example.com"},
+        "notification_types": 1,
+        "emergency_contact": True,
+    }
+    client.share_location("location", "guest@example.com")
+    assert requests_mock.last_request.json() == {"email_address": "guest@example.com"}
+    client.relabel_span("device", "span", "IRRIGATION")
+    assert requests_mock.last_request.json() == {"type": "IRRIGATION"}
+    profiles = client.get_location_profiles()
+    assert isinstance(profiles, LocationProfiles)
+    assert isinstance(profiles.indoor[0], LocationProfileField)
+    assert profiles.indoor[0].field == "toilet"
+    accuracy = client.check_meter_accuracy("device")
+    assert isinstance(accuracy[0], AccuracyResult)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        lambda client: client.create_budget("device", {"type": "DAILY", "value": 1}),
+        lambda client: client.update_budget("device", "budget", {"value": 2}),
+        lambda client: client.delete_budget("device", "budget"),
+        lambda client: client.create_location_subscription("location", {}),
+        lambda client: client.update_subscription("subscription", {}),
+        lambda client: client.delete_subscription("subscription"),
+        lambda client: client.grant_location_access("location", {}),
+        lambda client: client.revoke_location_access("location", "access"),
+        lambda client: client.relabel_span("device", "span", "OUTDOOR"),
+        lambda client: client.submit_meter_accuracy("device", {}),
+    ],
+)
+def test_audited_portal_mutations_reject_personal_auth_before_transport(
+    requests_mock, operation
+):
+    """Unprefixed portal mutation helpers cannot silently write with PersonalAuth."""
+    client = FlumeClient(auth())
+
+    with pytest.raises(FlumeCapabilityError, match="PortalAuth"):
+        operation(client)
+
+    assert requests_mock.call_count == 0
