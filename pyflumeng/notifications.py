@@ -5,13 +5,10 @@ from typing import Any, List, Optional, Union, cast
 from requests import Session
 
 from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
-from .constants import (  # noqa: WPS300
-    API_BASE_URL,
-    API_NOTIFICATIONS_URL,
-    DEFAULT_TIMEOUT,
-)
+from .constants import DEFAULT_TIMEOUT  # noqa: WPS300
 from .models import Notification, modelize  # noqa: WPS300
 from .types import JSONDict, RequestParams  # noqa: WPS300
+from .utils import api_url as build_api_url  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -55,7 +52,10 @@ class FlumeNotificationList:
             List[Notification]: Typed notification models.
         """
 
-        api_url = API_NOTIFICATIONS_URL.format(user_id=self._flume_auth.user_id)
+        api_url = build_api_url(
+            self._flume_auth,
+            "/users/{0}/notifications".format(self._flume_auth.user_id),
+        )
 
         query_string: RequestParams = {
             "limit": "50",
@@ -76,7 +76,7 @@ class FlumeNotificationList:
             ValueError: If no next page is available.
         """
         if self.has_next:
-            api_url = f"{API_BASE_URL}{self.next_page}"
+            api_url = build_api_url(self._flume_auth, self.next_page or "")
             query_string: RequestParams = {}
         else:
             raise ValueError("No next page available.")

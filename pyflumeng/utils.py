@@ -3,9 +3,27 @@
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Union
+from typing import Any, Union
+from urllib.parse import urlsplit
 
 from requests import Response
+
+from .constants import API_BASE_URL, PORTAL_API_URL
+
+
+def api_base_url(flume_auth: Any) -> str:
+    """Return the API host appropriate for the auth token in use."""
+    capabilities: Any = getattr(flume_auth, "capabilities", frozenset())
+    return PORTAL_API_URL if "portal_api" in capabilities else API_BASE_URL
+
+
+def api_url(flume_auth: Any, path: str) -> str:
+    """Build an auth-aware API URL from a relative or paginated path."""
+    parsed = urlsplit(path)
+    normalized = parsed.path
+    if parsed.query:
+        normalized += "?" + parsed.query
+    return api_base_url(flume_auth).rstrip("/") + "/" + normalized.lstrip("/")
 
 
 def configure_logger(name: str) -> logging.Logger:

@@ -44,6 +44,10 @@ data = pyflumeng.FlumeData(
 )
 ```
 
+`FlumeData` selects the API host from the auth object. With `PortalAuth`, the
+same user-scoped query route is sent to `https://api.flumewater.com`; with
+`PersonalAuth`, it remains on `https://api.flumetech.com`.
+
 `update()` applies the legacy rate limiter. `update_force()` performs the query
 immediately. The default `scan_interval` is 60 minutes. When you pass a custom
 `query_payload`, PyFlumeNG sends that payload unchanged on every update and the

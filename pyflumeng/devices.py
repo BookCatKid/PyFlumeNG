@@ -5,9 +5,9 @@ from typing import List, Optional, Union
 from requests import Session
 
 from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
-from .constants import API_DEVICES_URL, DEFAULT_TIMEOUT  # noqa: WPS300
+from .constants import DEFAULT_TIMEOUT  # noqa: WPS300
 from .models import Device, modelize  # noqa: WPS300
-from .utils import configure_logger, flume_response_error  # noqa: WPS300
+from .utils import api_url, configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
 LOGGER = configure_logger(__name__)
@@ -51,7 +51,7 @@ class FlumeDeviceList:
 
         """
 
-        url = API_DEVICES_URL.format(user_id=self._flume_auth.user_id)
+        url = api_url(self._flume_auth, "/users/{0}/devices".format(self._flume_auth.user_id))
         query_string = {"user": "true", "location": "true"}
 
         response = self._http_session.request(

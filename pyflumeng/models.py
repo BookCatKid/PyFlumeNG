@@ -235,7 +235,7 @@ class UserPlan(FlumeModel):
     }
 
 
-User.nested["plan"] = UserPlan
+User.nested = {"plan": UserPlan}
 
 
 class Coordinates(FlumeModel):
@@ -489,7 +489,7 @@ class NotificationExtra(FlumeModel):
     nested = {"query": NotificationQuery}
 
 
-Notification.nested["extra"] = NotificationExtra
+Notification.nested = {"extra": NotificationExtra}
 
 
 class UsageAlert(FlumeModel):
@@ -634,6 +634,37 @@ class Budget(FlumeModel):
         "recur_multiplier": None,
     }
 
+    @property
+    def target(self) -> float:
+        """Return the configured budget target as a float."""
+        return float(self.value)
+
+    @property
+    def used(self) -> Optional[float]:
+        """Return usage accumulated in the budget period, when reported."""
+        return None if self.actual is None else float(self.actual)
+
+    @property
+    def remaining(self) -> Optional[float]:
+        """Return target minus actual usage; negative values indicate overage."""
+        if self.actual is None:
+            return None
+        return self.target - float(self.actual)
+
+    @property
+    def percentage_used(self) -> Optional[float]:
+        """Return actual usage as a percentage of the configured target."""
+        if self.actual is None or self.target <= 0:
+            return None
+        return (float(self.actual) / self.target) * 100.0
+
+    @property
+    def is_over_budget(self) -> Optional[bool]:
+        """Return whether actual usage exceeds the target, when actual is known."""
+        if self.actual is None:
+            return None
+        return float(self.actual) > self.target
+
 
 class Subscription(FlumeModel):
     """Notification subscription or emergency contact."""
@@ -736,7 +767,7 @@ class RecurrenceRule(FlumeModel):
     }
 
 
-DoNotAlertSchedule.nested["rrule_obj"] = RecurrenceRule
+DoNotAlertSchedule.nested = {"rrule_obj": RecurrenceRule}
 
 
 class LocationAccess(FlumeModel):
@@ -817,7 +848,7 @@ class Span(FlumeModel):
     }
 
 
-Span.nested["data"] = SpanDataPoint
+Span.nested = {"data": SpanDataPoint}
 
 
 class SpanType(FlumeModel):
@@ -836,6 +867,56 @@ class SpanType(FlumeModel):
         "can_relabel": False,
         "can_view": False,
     }
+
+
+class UsageBreakdownCategory(FlumeModel):
+    """Aggregated usage for one span classification."""
+
+    type: str
+    display_name: str
+    usage: float
+    percentage: float
+    span_count: int
+
+    defaults = {
+        "type": "",
+        "display_name": "",
+        "usage": 0.0,
+        "percentage": 0.0,
+        "span_count": 0,
+    }
+
+    @property
+    def rounded_percentage(self) -> int:
+        """Return the whole-number percentage used by the portal dashboard."""
+        return int(round(self.percentage))
+
+
+class UsageBreakdown(FlumeModel):
+    """Dashboard-ready usage totals aggregated from classified spans."""
+
+    since_datetime: str
+    until_datetime: str
+    units: str
+    total_usage: float
+    categories: List[UsageBreakdownCategory]
+
+    defaults = {
+        "since_datetime": "",
+        "until_datetime": "",
+        "units": "gallons",
+        "total_usage": 0.0,
+        "categories": [],
+    }
+    nested = {"categories": UsageBreakdownCategory}
+
+    def category(self, span_type: str) -> Optional[UsageBreakdownCategory]:
+        """Return one classification by its API span type."""
+        normalized = span_type.upper()
+        return next(
+            (category for category in self.categories if category.type == normalized),
+            None,
+        )
 
 
 class Leak(FlumeModel):

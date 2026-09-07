@@ -163,8 +163,12 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `create_stripe_portal(return_url: str) -> JSONValue`
 - `subscribe(return_url: str) -> JSONValue`
 - `list_do_not_alert_schedules(device_id: ResourceId, **params: JSONValue) -> List[DoNotAlertSchedule]`
+- `get_do_not_alert_schedule(device_id: ResourceId, schedule_id: ResourceId) -> Optional[DoNotAlertSchedule]`
+  Fetch one Do Not Alert schedule.
 - `list_portal_do_not_alert_schedules(device_id: ResourceId, **params: JSONValue) -> List[DoNotAlertSchedule]`
   List DNA schedules through the portal's user-scoped route.
+- `get_portal_do_not_alert_schedule(device_id: ResourceId, schedule_id: ResourceId) -> Optional[DoNotAlertSchedule]`
+  Fetch one DNA schedule using the portal-compatible user route.
 - `create_do_not_alert_schedule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `create_portal_do_not_alert_schedule(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Create a DNA schedule using the portal payload.
@@ -210,6 +214,8 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `update_span_type(device_id: ResourceId, span_id: ResourceId, span_type: str) -> JSONValue`
   Set a span's type using the portal's exact payload shape.
 - `list_span_types(location_id: ResourceId, **params: JSONValue) -> List[SpanType]`
+- `get_usage_breakdown(device_id: ResourceId, since_datetime: str, until_datetime: str, units: str = 'gallons', span_types: Optional[Sequence[str]] = None, location_id: Optional[ResourceId] = None) -> UsageBreakdown`
+  Aggregate classified spans into portal-style usage categories.
 - `submit_feedback(device_id: ResourceId, payload: JSONDict) -> JSONValue`
 - `submit_device_feedback(device_id: ResourceId, payload: JSONDict) -> JSONValue`
   Submit device feedback through the portal route.
@@ -716,6 +722,30 @@ Available span classification metadata.
 | `labeled_as` | `str` |
 | `can_relabel` | `bool` |
 | `can_view` | `bool` |
+
+### `UsageBreakdownCategory`
+
+Aggregated usage for one span classification.
+
+| Field | Type |
+| --- | --- |
+| `type` | `str` |
+| `display_name` | `str` |
+| `usage` | `float` |
+| `percentage` | `float` |
+| `span_count` | `int` |
+
+### `UsageBreakdown`
+
+Dashboard-ready usage totals aggregated from classified spans.
+
+| Field | Type |
+| --- | --- |
+| `since_datetime` | `str` |
+| `until_datetime` | `str` |
+| `units` | `str` |
+| `total_usage` | `float` |
+| `categories` | `List[UsageBreakdownCategory]` |
 
 ### `Leak`
 

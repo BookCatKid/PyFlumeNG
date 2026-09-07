@@ -72,15 +72,77 @@ print(spans[0].data[0].datetime, spans[0].data[0].value)
 
 The date strings use the exact `YYYY-MM-DD HH:MM:SS` format used by Flume's
 current customer portal. `units` defaults to `"gallons"`. If `span_types` is
-omitted, PyFlumeNG sends the portal's current classification set (`OUTDOOR`,
-`INDOOR`, `SHOWER`, `TOILET`, `SOFTENER`, `CLOTHES_WASHER`, `DISH_WASHER`,
-`POOL`, and `REVERSE_OSMOSIS`). Pass your own sequence of strings to filter it.
+omitted, PyFlumeNG sends the known portal classification set (`IRRIGATION`,
+`OUTDOOR`, `INDOOR`, `SHOWER`, `TOILET`, `SOFTENER`, `CLOTHES_WASHER`,
+`DISH_WASHER`, `POOL`, and `REVERSE_OSMOSIS`). Pass your own sequence of strings
+to filter it.
 
 Live portal responses contained `id`, `type`, `start`, `end`, `data`,
 `is_editable`, `max_flowrate`, `mode_gpm`, `origin`, `total`, `value`, and
 `version`. Each `data` entry is a typed `SpanDataPoint` with `datetime` and a
 numeric `value`. PersonalAuth returned 404 for this endpoint during live
 validation, while PortalAuth returned the span data on a supported device.
+
+For dashboards, `get_usage_breakdown()` performs the portal-specific
+aggregation step and returns a typed `UsageBreakdown` instead of making callers
+reconstruct it themselves:
+
+```python
+breakdown = client.get_usage_breakdown(
+    device_id,
+    since_datetime="2026-09-01 00:00:00",
+    until_datetime="2026-09-07 00:00:00",
+    location_id=location_id,
+)
+
+print(breakdown.total_usage)
+for category in breakdown.categories:
+    print(category.display_name, category.usage, category.rounded_percentage)
+```
+
+The denominator is **not** the sum of classified span totals. PyFlumeNG sends a
+whole-window device query using the same live-verified shape as Flume's query
+API (`bucket="MON"`, `operation="SUM"`) and uses that result as
+`total_usage`. Raw `IRRIGATION` and `OUTDOOR` span totals are rolled into the
+single displayed `Outdoor` category. `Indoor` is derived as the residual
+whole-house total after subtracting every other displayed classified category;
+the live account returned no raw `INDOOR` spans even while the portal displayed
+Indoor usage. Explicit categories such as Shower, Toilet, Clothes Washer, and
+Dishwasher remain direct sums of their raw classified spans.
+
+Categories are sorted by usage descending and expose the displayed
+classification key, display name, usage, exact percentage against the
+whole-window query total, whole-number dashboard percentage, and contributing
+span count. A derived Indoor category has `span_count == 0`. Passing
+`location_id` lets PyFlumeNG use Flume's current `SpanType` display metadata;
+omit it to avoid that extra request and use the built-in portal labels/readable
+fallback instead.
+
+### Legacy helpers and auth-aware hosts
+
+The original helper classes now select their API host from the auth object just
+like `FlumeClient`. `PortalAuth` sends legacy device, data-query, notification,
+leak, usage-alert, rule, and pagination requests to
+`https://api.flumewater.com`; `PersonalAuth` keeps using
+`https://api.flumetech.com`. This makes the legacy helpers match the documented
+promise that either auth mode can be used for ordinary reads.
+
+### Budget progress
+
+`Budget.value` is the configured target and `Budget.actual` is usage reported
+for the current budget period. Convenience properties make those fields easier
+to expose as dashboard entities without changing the serialized API payload:
+
+```python
+budget = client.list_budgets(device_id)[0]
+print(budget.used, budget.target)
+print(budget.percentage_used)
+print(budget.remaining, budget.is_over_budget)
+```
+
+`used`, `remaining`, `percentage_used`, and `is_over_budget` are `None` when
+Flume has not supplied an `actual` value. `percentage_used` is also `None` for
+a zero/non-positive target.
 
 For writes where the portal's broader token is known to be required,
 `FlumeClient` checks the auth capability before making the request. Examples
@@ -100,6 +162,12 @@ returned. Use `iter_pages()` when page boundaries or response metadata matter.
 Use `response()` for a typed Flume envelope, `raw()` for an unwrapped future
 route that does not yet have a named helper, and `raw_response()` when the
 underlying `requests.Response` is required.
+
+Every response also updates `client.rate_limit` when Flume supplies
+`X-RateLimit-*` headers. Portal responses have been observed advertising a
+72,000-request quota. Live reset epochs vary and are not a fixed local-midnight
+boundary; see [Authentication](auth.md) for the exact observed headers and
+polling implications.
 
 ## Typed results
 

@@ -11,14 +11,19 @@ from pyflumeng import (
     Device,
     DoNotAlertSchedule,
     FlumeClient,
+    FlumeData,
+    FlumeNotificationList,
     FlumePortalAuth,
     FlumeResponse,
+    FlumeUsageAlertList,
     Notification,
     PersonalAuth,
     Span,
     SpanDataPoint,
     UsageAlertRule,
     UsageAlertSchedule,
+    UsageBreakdown,
+    UsageBreakdownCategory,
 )
 from pyflumeng.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
 from pyflumeng.constants import API_BASE_URL, PORTAL_API_URL, URL_OAUTH_TOKEN
@@ -274,6 +279,28 @@ def test_rate_limit_state_ignores_invalid_header_values():
     assert state.retry_after == "3"
 
 
+def test_portal_rate_limit_is_confirmed_from_response_headers(requests_mock):
+    """Portal responses advertise the observed 72,000-request quota."""
+    requests_mock.get(
+        PORTAL_API_URL + "/users/12345",
+        headers={
+            "X-RateLimit-Limit": "72000",
+            "X-RateLimit-Remaining": "71980",
+            "X-RateLimit-Reset": "1788677989",
+        },
+        json={"success": True, "data": [{"id": 12345}]},
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    client.get_user()
+
+    assert client.rate_limit.limit == 72000
+    assert client.rate_limit.remaining == 71980
+    assert client.rate_limit.reset == 1788677989
+
+
 def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
     """Rule updates use the portal-capable endpoint and preserve empty data."""
     url = PORTAL_API_URL + "/users/12345/devices/device/rules/usage-alerts/rule"
@@ -286,6 +313,28 @@ def test_usage_rule_update_uses_portal_endpoint_and_json(requests_mock):
 
     assert result == []
     assert requests_mock.last_request.json() == {"active": False}
+
+
+def test_usage_rule_create_and_delete_use_guarded_unprefixed_methods(requests_mock):
+    """Rule CRUD uses the normal names while enforcing portal write scope."""
+    collection = PORTAL_API_URL + "/users/12345/devices/device/rules/usage-alerts"
+    item = collection + "/rule"
+    requests_mock.post(collection, json={"success": True, "data": [{"id": "rule"}]})
+    requests_mock.delete(item, json={"success": True, "data": []})
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    created = client.create_usage_alert_rule("device", {"name": "Irrigation"})
+    deleted = client.delete_usage_alert_rule("device", "rule")
+
+    assert created == [{"id": "rule"}]
+    assert deleted == []
+    assert requests_mock.request_history[0].json() == {"name": "Irrigation"}
+
+    personal_client = FlumeClient(auth())
+    with pytest.raises(FlumeCapabilityError, match="PortalAuth"):
+        personal_client.delete_usage_alert_rule("device", "rule")
 
 
 def test_personal_auth_rejects_portal_rule_write_before_transport(requests_mock):
@@ -327,19 +376,21 @@ def test_portal_query_batches_and_combines_more_than_ten_queries(requests_mock):
 def test_portal_resource_wrappers_match_frontend_routes(requests_mock):
     """Named portal wrappers preserve frontend paths, query, and payloads."""
     requests_mock.get(
-        API_BASE_URL + "/location-profiles",
+        PORTAL_API_URL + "/location-profiles",
         json={"success": True, "data": [{"field": "toilet"}]},
     )
     requests_mock.patch(
-        API_BASE_URL + "/users/12345/devices/device/spans/span",
+        PORTAL_API_URL + "/users/12345/devices/device/spans/span",
         json={"success": True, "data": []},
     )
     requests_mock.patch(
-        API_BASE_URL
+        PORTAL_API_URL
         + "/users/12345/devices/device/rules/usage-alerts/rule/do-not-alert-schedules/16158",
         json={"success": True, "data": []},
     )
-    client = FlumeClient(auth())
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
 
     assert client.get_location_profiles()["field"] == "toilet"
     client.update_span_type("device", "span", "IRRIGATION")
@@ -390,6 +441,111 @@ def test_span_read_matches_live_portal_shape_and_roundtrips(requests_mock):
     assert requests_mock.last_request.qs["units"] == ["gallons"]
     sent_query = parse_qs(urlsplit(requests_mock.last_request.url).query)
     assert sent_query["types"] == ["OUTDOOR,SHOWER"]
+
+
+def test_usage_breakdown_matches_live_portal_rollup_and_total_query(requests_mock):
+    """Breakdown uses whole-house SUM and derives Indoor from live raw spans."""
+    requests_mock.get(
+        PORTAL_API_URL + "/users/12345/devices/device/spans",
+        json={
+            "success": True,
+            "data": [
+                {"id": "1", "type": "IRRIGATION", "total": 1732.58617265},
+                {"id": "2", "type": "OUTDOOR", "total": 4.3016936},
+                {"id": "3", "type": "SHOWER", "total": 429.9163192},
+                {"id": "4", "type": "TOILET", "total": 228.4642123},
+                {"id": "5", "type": "CLOTHES_WASHER", "total": 224.0676284},
+                {"id": "6", "type": "DISH_WASHER", "total": 13.26882695},
+            ],
+        },
+    )
+    query_url = PORTAL_API_URL + "/users/12345/devices/device/query"
+    requests_mock.post(
+        query_url,
+        json={
+            "success": True,
+            "data": [{"usage_breakdown_total": [{"value": 3645.51}]}],
+        },
+    )
+    requests_mock.get(
+        PORTAL_API_URL + "/users/12345/locations/location/span-types",
+        json={
+            "success": True,
+            "data": [
+                {"name": "OUTDOOR", "display_name": "Outdoor", "can_view": True},
+                {"name": "INDOOR", "display_name": "Indoor", "can_view": True},
+                {"name": "SHOWER", "display_name": "Shower", "can_view": True},
+                {"name": "TOILET", "display_name": "Toilet", "can_view": True},
+                {
+                    "name": "CLOTHES_WASHER",
+                    "display_name": "Clothes Washer",
+                    "can_view": True,
+                },
+                {
+                    "name": "DISH_WASHER",
+                    "display_name": "Dishwasher",
+                    "can_view": True,
+                },
+                {
+                    "name": "FUTURE_FIXTURE",
+                    "display_name": "Future Fixture",
+                    "can_view": True,
+                },
+            ],
+        },
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    breakdown = client.get_usage_breakdown(
+        "device",
+        "2026-09-01 00:00:00",
+        "2026-09-06 23:59:59",
+        location_id="location",
+    )
+
+    assert isinstance(breakdown, UsageBreakdown)
+    assert isinstance(breakdown.categories[0], UsageBreakdownCategory)
+    assert breakdown.total_usage == pytest.approx(3645.51)
+    assert [category.type for category in breakdown.categories] == [
+        "OUTDOOR",
+        "INDOOR",
+        "SHOWER",
+        "TOILET",
+        "CLOTHES_WASHER",
+        "DISH_WASHER",
+    ]
+    assert breakdown.category("OUTDOOR").usage == pytest.approx(1736.88786625)
+    assert breakdown.category("INDOOR").span_count == 0
+    assert breakdown.category("INDOOR").usage == pytest.approx(1012.9051469)
+    assert [category.rounded_percentage for category in breakdown.categories] == [
+        48,
+        28,
+        12,
+        6,
+        6,
+        0,
+    ]
+    assert breakdown.category("clothes_washer").usage == pytest.approx(224.0676284)
+    assert breakdown.category("DISH_WASHER").display_name == "Dishwasher"
+    assert requests_mock.call_count == 3
+    sent_query = parse_qs(urlsplit(requests_mock.request_history[1].url).query)
+    assert "FUTURE_FIXTURE" in sent_query["types"][0].split(",")
+    assert "IRRIGATION" in sent_query["types"][0].split(",")
+    assert requests_mock.request_history[2].url == query_url
+    assert requests_mock.request_history[2].json() == {
+        "queries": [
+            {
+                "request_id": "usage_breakdown_total",
+                "bucket": "MON",
+                "since_datetime": "2026-09-01 00:00:00",
+                "until_datetime": "2026-09-06 23:59:59",
+                "operation": "SUM",
+                "units": "GALLONS",
+            }
+        ]
+    }
 
 
 def test_portal_accuracy_payload_wrapper(requests_mock):
@@ -542,6 +698,26 @@ def test_models_follow_portal_shapes_and_preserve_unknown_fields():
     assert isinstance(Budget({"id": 1}), Budget)
 
 
+def test_budget_progress_helpers_expose_used_target_and_percentage():
+    """Budget helpers provide dashboard-ready progress without changing API data."""
+    budget = Budget({"id": 1, "value": 1000, "actual": 375.5})
+    over = Budget({"id": 2, "value": 100, "actual": 125})
+    pending = Budget({"id": 3, "value": 0})
+
+    assert budget.target == 1000.0
+    assert budget.used == 375.5
+    assert budget.remaining == 624.5
+    assert budget.percentage_used == pytest.approx(37.55)
+    assert budget.is_over_budget is False
+    assert over.remaining == -25.0
+    assert over.percentage_used == 125.0
+    assert over.is_over_budget is True
+    assert pending.used is None
+    assert pending.percentage_used is None
+    assert pending.is_over_budget is None
+    assert budget.to_dict() == {"id": 1, "value": 1000, "actual": 375.5}
+
+
 def test_rule_nested_schedules_round_trip_as_portal_models():
     """Usage-alert schedules are typed and serialize back to API-shaped data."""
     rule = UsageAlertRule(
@@ -610,6 +786,42 @@ def test_full_do_not_alert_schedule_allows_null_updated_datetime():
     assert schedule.rrule_obj.freq == "WEEKLY"
 
 
+def test_do_not_alert_schedule_has_single_resource_read_and_guarded_writes(
+    requests_mock,
+):
+    """DNA schedule CRUD has coherent unprefixed helpers and portal write guards."""
+    collection = PORTAL_API_URL + "/users/12345/devices/device/do-not-alert-schedules"
+    url = collection + "/16158"
+    requests_mock.get(
+        url,
+        json={"success": True, "data": [{"id": 16158, "name": "Irrigation"}]},
+    )
+    requests_mock.post(
+        collection,
+        json={"success": True, "data": [{"id": 16158, "name": "Irrigation"}]},
+    )
+    requests_mock.patch(url, json={"success": True, "data": []})
+    requests_mock.delete(url, json={"success": True, "data": []})
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    schedule = client.get_do_not_alert_schedule("device", 16158)
+    created = client.create_do_not_alert_schedule("device", {"name": "Irrigation"})
+    client.update_do_not_alert_schedule("device", 16158, {"name": "Sprinklers"})
+    deleted = client.delete_do_not_alert_schedule("device", 16158)
+
+    assert isinstance(schedule, DoNotAlertSchedule)
+    assert schedule.name == "Irrigation"
+    assert created == [{"id": 16158, "name": "Irrigation"}]
+    assert requests_mock.request_history[2].json() == {"name": "Sprinklers"}
+    assert deleted == []
+
+    personal_client = FlumeClient(auth())
+    with pytest.raises(FlumeCapabilityError, match="PortalAuth"):
+        personal_client.create_do_not_alert_schedule("device", {"name": "blocked"})
+
+
 def test_portal_read_aliases_use_working_user_scoped_routes(requests_mock):
     """Portal read aliases do not call the invalid guessed root routes."""
     requests_mock.get(
@@ -672,6 +884,91 @@ def test_portal_services_match_frontend_user_scoped_routes(requests_mock):
         "/users/12345/locations/location/access",
         "/users/12345/clients",
     ]
+
+
+def test_legacy_helpers_use_portal_host_and_keep_pagination_on_portal(requests_mock):
+    """Legacy helpers route PortalAuth reads and next pages to api.flumewater.com."""
+    auth_obj = PortalAuth("user@example.com", "password", flume_token=token())
+    devices_url = PORTAL_API_URL + "/users/12345/devices"
+    query_url = PORTAL_API_URL + "/users/12345/devices/device/query"
+    leak_url = PORTAL_API_URL + "/users/12345/devices/device/leaks/active"
+    notifications_url = PORTAL_API_URL + "/users/12345/notifications"
+    notification_next = "/users/12345/notifications?offset=1&limit=1"
+    usage_url = PORTAL_API_URL + "/users/12345/usage-alerts"
+    usage_next = "/users/12345/usage-alerts?offset=1&limit=1"
+
+    requests_mock.get(
+        devices_url,
+        json={"success": True, "data": [{"id": "device"}]},
+    )
+    requests_mock.post(
+        query_url,
+        json={"success": True, "data": [{"window": [{"value": 12.5}]}]},
+    )
+    requests_mock.get(
+        leak_url,
+        json={"success": True, "data": [{"id": "leak", "active": True}]},
+    )
+    requests_mock.get(
+        notifications_url,
+        json={
+            "success": True,
+            "data": [{"id": "notice-1"}],
+            "pagination": {"next": notification_next},
+        },
+    )
+    requests_mock.get(
+        PORTAL_API_URL + notification_next,
+        json={"success": True, "data": [{"id": "notice-2"}], "pagination": None},
+    )
+    requests_mock.get(
+        usage_url,
+        json={
+            "success": True,
+            "data": [{"id": "usage-1"}],
+            "pagination": {"next": usage_next},
+        },
+    )
+    requests_mock.get(
+        PORTAL_API_URL + usage_next,
+        json={"success": True, "data": [{"id": "usage-2"}], "pagination": None},
+    )
+
+    assert FlumeDeviceList(auth_obj).device_list[0].id == "device"
+    data = FlumeData(
+        auth_obj,
+        "device",
+        "America/Los_Angeles",
+        query_payload={
+            "queries": [
+                {
+                    "request_id": "window",
+                    "bucket": "MON",
+                    "since_datetime": "2026-09-01 00:00:00",
+                    "until_datetime": "2026-09-06 21:02:00",
+                    "operation": "SUM",
+                    "units": "GALLONS",
+                }
+            ]
+        },
+        update_on_init=False,
+    )
+    data.update_force()
+    assert data.values == {"window": 12.5}
+    assert FlumeLeakList(auth_obj, "device").leak_alert_list[0].active is True
+
+    notices = FlumeNotificationList(auth_obj)
+    assert notices.notification_list[0].id == "notice-1"
+    assert notices.get_next_notifications()[0].id == "notice-2"
+
+    usage = FlumeUsageAlertList(auth_obj)
+    assert usage.usage_alert_list[0].id == "usage-1"
+    assert usage.get_next_usage_alerts()[0].id == "usage-2"
+
+    assert all(
+        request.url.startswith(PORTAL_API_URL)
+        for request in requests_mock.request_history
+    )
 
 
 def test_client_returns_typed_models(requests_mock):

@@ -5,15 +5,10 @@ from typing import Any, List, Optional, Type, TypeVar, Union, cast
 from requests import Session
 
 from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
-from .constants import (  # noqa: WPS300
-    API_BASE_URL,
-    API_USAGE_RULE_URL,
-    API_USAGE_RULES_URL,
-    API_USAGE_URL,
-    DEFAULT_TIMEOUT,
-)
+from .constants import DEFAULT_TIMEOUT  # noqa: WPS300
 from .models import FlumeModel, UsageAlert, UsageAlertRule, modelize  # noqa: WPS300
 from .types import JSONDict, JSONValue, RequestParams, ResourceId  # noqa: WPS300
+from .utils import api_url as build_api_url  # noqa: WPS300
 from .utils import configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
@@ -62,7 +57,10 @@ class FlumeUsageAlertList:
             Returns JSON list of usage alerts.
         """
 
-        api_url = API_USAGE_URL.format(user_id=self._flume_auth.user_id)
+        api_url = build_api_url(
+            self._flume_auth,
+            "/users/{0}/usage-alerts".format(self._flume_auth.user_id),
+        )
         query_string: RequestParams = {
             "limit": "50",
             "offset": "0",
@@ -81,7 +79,7 @@ class FlumeUsageAlertList:
             ValueError: If no next page is available.
         """
         if self.has_next:
-            api_url = f"{API_BASE_URL}{self.next_page}"
+            api_url = build_api_url(self._flume_auth, self.next_page or "")
             query_string: RequestParams = {}
         else:
             raise ValueError("No next page available.")
@@ -96,9 +94,12 @@ class FlumeUsageAlertList:
         Returns:
             Returns JSON list of usage alert rules.
         """
-        api_url = API_USAGE_RULES_URL.format(
-            user_id=self._flume_auth.user_id,
-            device_id=device_id,
+        api_url = build_api_url(
+            self._flume_auth,
+            "/users/{0}/devices/{1}/rules/usage-alerts".format(
+                self._flume_auth.user_id,
+                device_id,
+            ),
         )
         return cast(
             List[UsageAlertRule],
@@ -124,10 +125,13 @@ class FlumeUsageAlertList:
         Returns:
             Returns JSON object (or single-element list) for the rule.
         """
-        api_url = API_USAGE_RULE_URL.format(
-            user_id=self._flume_auth.user_id,
-            device_id=device_id,
-            rule_id=rule_id,
+        api_url = build_api_url(
+            self._flume_auth,
+            "/users/{0}/devices/{1}/rules/usage-alerts/{2}".format(
+                self._flume_auth.user_id,
+                device_id,
+                rule_id,
+            ),
         )
         return cast(
             List[UsageAlertRule],
@@ -159,10 +163,13 @@ class FlumeUsageAlertList:
             object: Response data from API. Note: live API returns an empty
                 list on PATCH success, so re-GET the rule to verify state.
         """
-        api_url = API_USAGE_RULE_URL.format(
-            user_id=self._flume_auth.user_id,
-            device_id=device_id,
-            rule_id=rule_id,
+        api_url = build_api_url(
+            self._flume_auth,
+            "/users/{0}/devices/{1}/rules/usage-alerts/{2}".format(
+                self._flume_auth.user_id,
+                device_id,
+                rule_id,
+            ),
         )
         response = self._http_session.request(
             "PATCH",

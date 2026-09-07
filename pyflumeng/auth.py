@@ -1,7 +1,7 @@
 """Authenticates to Flume API."""
 
-from datetime import datetime, timedelta, timezone
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar, Dict, FrozenSet, Mapping, Optional, cast
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4

@@ -53,6 +53,8 @@ from .models import (  # noqa: WPS300, F401
     UsageAlert,
     UsageAlertRule,
     UsageAlertSchedule,
+    UsageBreakdown,
+    UsageBreakdownCategory,
     User,
     UserPlan,
 )
@@ -85,6 +87,8 @@ __all__ = [
     "UsageAlert",
     "UsageAlertRule",
     "UsageAlertSchedule",
+    "UsageBreakdown",
+    "UsageBreakdownCategory",
     "UserPlan",
     "Budget",
     "Subscription",

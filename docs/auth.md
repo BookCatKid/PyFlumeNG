@@ -93,9 +93,29 @@ overrides that default.
 The resulting auth object has `personal_api`, `portal_api`, and
 `portal_writes` capabilities. That is why it can be passed to the same
 user-scoped read helpers as `PersonalAuth` while also unlocking additional
-portal-only operations. Its `RateLimitState` starts with the portal baseline of 72,000
-requests and, like PersonalAuth, is replaced by values reported in response
-headers.
+portal-only operations.
+
+Live customer-portal API responses have been observed advertising a **72,000
+request quota** in the normal rate-limit headers. For example, one response
+contained:
+
+```text
+X-RateLimit-Limit: 72000
+X-RateLimit-Remaining: 71996
+X-RateLimit-Reset: 1788755748
+```
+
+`PortalAuth.rate_limit` therefore starts with a 72,000-request baseline, and
+`FlumeClient` replaces its `limit`, `remaining`, and `reset` values from every
+response that supplies those headers. Do **not** interpret `X-RateLimit-Reset`
+as a fixed calendar-midnight reset: live calls returned different reset epochs,
+and one captured response was only 1,113 seconds (18m33s) before its advertised
+reset. That behavior is consistent with a rolling/windowed quota rather than a
+single midnight counter. Code doing frequent polling should use the live
+`client.rate_limit` state instead of assuming either the full quota or a fixed
+reset cadence. If treating 72,000 as a 24-hour budget for planning purposes,
+the simple average is 50 requests/minute (one every 1.2 seconds), but production
+pollers should leave headroom and honor any server-provided `Retry-After` value.
 
 Portal tokens refresh five minutes before expiry, matching the web
 application's refresh window. Call `auth.logout()` to revoke the refresh token

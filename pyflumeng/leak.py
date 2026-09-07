@@ -5,10 +5,10 @@ from typing import List, Optional, Union
 from requests import Session
 
 from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
-from .constants import API_LEAK_URL, DEFAULT_TIMEOUT  # noqa: WPS300
+from .constants import DEFAULT_TIMEOUT  # noqa: WPS300
 from .models import Leak, modelize  # noqa: WPS300
 from .types import ResourceId  # noqa: WPS300
-from .utils import configure_logger, flume_response_error  # noqa: WPS300
+from .utils import api_url, configure_logger, flume_response_error  # noqa: WPS300
 
 # Configure logging
 LOGGER = configure_logger(__name__)
@@ -56,9 +56,12 @@ class FlumeLeakList:
             Returns JSON list of leak notifications.
         """
 
-        url = API_LEAK_URL.format(
-            user_id=self._flume_auth.user_id,
-            device_id=self.device_id,
+        url = api_url(
+            self._flume_auth,
+            "/users/{0}/devices/{1}/leaks/active".format(
+                self._flume_auth.user_id,
+                self.device_id,
+            ),
         )
 
         query_string = {

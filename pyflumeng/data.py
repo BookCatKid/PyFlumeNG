@@ -10,13 +10,13 @@ from requests import Session
 from .auth import FlumeAuth, FlumePortalAuth  # noqa: WPS300
 from .constants import (  # noqa: WPS300
     API_LIMIT,
-    API_QUERY_URL,
     CONST_OPERATION,
     CONST_UNIT_OF_MEASUREMENT,
     DEFAULT_TIMEOUT,
 )
 from .types import QueryPayload, QuerySpec, QueryValues, ResourceId  # noqa: WPS300
 from .utils import (  # noqa: WPS300
+    api_url,
     configure_logger,
     flume_response_error,
     format_start_month,
@@ -105,9 +105,12 @@ class FlumeData:
             )
         query_keys = [query["request_id"] for query in self.query_payload["queries"]]
 
-        url = API_QUERY_URL.format(
-            user_id=self._flume_auth.user_id,
-            device_id=self.device_id,
+        url = api_url(
+            self._flume_auth,
+            "/users/{0}/devices/{1}/query".format(
+                self._flume_auth.user_id,
+                self.device_id,
+            ),
         )
         response = self._http_session.post(
             url,

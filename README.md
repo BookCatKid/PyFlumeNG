@@ -79,6 +79,12 @@ Models expose known API fields to type checkers and IDEs while remaining
 forward-compatible with Flume additions. Unknown response fields remain
 available as attributes or mapping keys and are preserved by `to_dict()`.
 
+Higher-level typed helpers are available for common dashboard data as well:
+`get_usage_breakdown()` combines classified spans with a whole-window SUM query,
+rolls raw irrigation into Outdoor, derives Indoor as the unclassified residual,
+and returns category usage/percentages. `Budget` exposes `used`, `target`,
+`remaining`, `percentage_used`, and `is_over_budget` progress properties.
+
 `pyflumeng` ships a `py.typed` marker so installed type checkers can consume the
 package annotations. The complete method signatures and model fields are in the
 [generated API reference](docs/api-reference.md).
@@ -97,6 +103,14 @@ List helpers follow Flume pagination and return all pages. `response()` exposes
 the complete typed response envelope when pagination or metadata matters, and
 `raw()` remains an escape hatch for routes added by Flume after this release.
 See the [FlumeClient guide](docs/client.md) for the main interface.
+
+Customer-portal responses have been observed advertising a 72,000-request
+quota through `X-RateLimit-Limit`. The accompanying reset epoch varies between
+live requests and should not be treated as a fixed midnight reset.
+`FlumeClient.rate_limit` tracks the live server-reported limit, remaining
+requests, reset time, and `Retry-After` value so frequent pollers can budget
+requests from the current quota state. See
+[Authentication](docs/auth.md) for details.
 
 ## Legacy helpers
 

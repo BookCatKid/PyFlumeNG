@@ -2,6 +2,7 @@
 
 from typing import (
     Any,
+    Dict,
     Iterator,
     List,
     Optional,
@@ -46,6 +47,8 @@ from .models import (
     Subscription,
     UsageAlert,
     UsageAlertRule,
+    UsageBreakdown,
+    UsageBreakdownCategory,
     User,
 )
 from .types import JSONDict, JSONValue, RequestParams, ResourceId
@@ -53,6 +56,7 @@ from .types import JSONDict, JSONValue, RequestParams, ResourceId
 ModelT = TypeVar("ModelT", bound=FlumeModel)
 
 DEFAULT_PORTAL_SPAN_TYPES: Tuple[str, ...] = (
+    "IRRIGATION",
     "OUTDOOR",
     "INDOOR",
     "SHOWER",
@@ -63,6 +67,18 @@ DEFAULT_PORTAL_SPAN_TYPES: Tuple[str, ...] = (
     "POOL",
     "REVERSE_OSMOSIS",
 )
+
+DEFAULT_PORTAL_SPAN_DISPLAY_NAMES = {
+    "OUTDOOR": "Outdoor",
+    "INDOOR": "Indoor",
+    "SHOWER": "Shower",
+    "TOILET": "Toilet",
+    "SOFTENER": "Water Softener",
+    "CLOTHES_WASHER": "Clothes Washer",
+    "DISH_WASHER": "Dishwasher",
+    "POOL": "Pool",
+    "REVERSE_OSMOSIS": "Reverse Osmosis",
+}
 
 
 class FlumeClient:
@@ -548,6 +564,7 @@ class FlumeClient:
     def create_usage_alert_rule(
         self, device_id: ResourceId, payload: JSONDict
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "POST",
             self._user_path("/devices/{0}/rules/usage-alerts".format(device_id)),
@@ -560,12 +577,7 @@ class FlumeClient:
         payload: JSONDict,
     ) -> JSONValue:
         """Create a rule through the portal's user-scoped device route."""
-        self._require_capability("portal_writes")
-        return self.data(
-            "POST",
-            self._user_path("/devices/{0}/rules/usage-alerts".format(device_id)),
-            json=payload,
-        )
+        return self.create_usage_alert_rule(device_id, payload)
 
     def update_usage_alert_rule(
         self,
@@ -601,6 +613,7 @@ class FlumeClient:
     def delete_usage_alert_rule(
         self, device_id: ResourceId, rule_id: ResourceId
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "DELETE",
             self._user_path(
@@ -614,13 +627,7 @@ class FlumeClient:
         rule_id: ResourceId,
     ) -> JSONValue:
         """Delete a rule through the portal service's collection route."""
-        self._require_capability("portal_writes")
-        return self.data(
-            "DELETE",
-            self._user_path(
-                "/devices/{0}/rules/usage-alerts/{1}".format(device_id, rule_id)
-            ),
-        )
+        return self.delete_usage_alert_rule(device_id, rule_id)
 
     def set_usage_alert_rule_active(
         self,
@@ -862,23 +869,42 @@ class FlumeClient:
             DoNotAlertSchedule,
         )
 
+    def get_do_not_alert_schedule(
+        self,
+        device_id: ResourceId,
+        schedule_id: ResourceId,
+    ) -> Optional[DoNotAlertSchedule]:
+        """Fetch one Do Not Alert schedule."""
+        return self.data_one(
+            "GET",
+            self._user_path(
+                "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
+            ),
+            DoNotAlertSchedule,
+        )
+
     def list_portal_do_not_alert_schedules(
         self,
         device_id: ResourceId,
         **params: JSONValue,
     ) -> List[DoNotAlertSchedule]:
         """List DNA schedules through the portal's user-scoped route."""
-        return self.list_all(
-            self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)),
-            params,
-            DoNotAlertSchedule,
-        )
+        return self.list_do_not_alert_schedules(device_id, **params)
+
+    def get_portal_do_not_alert_schedule(
+        self,
+        device_id: ResourceId,
+        schedule_id: ResourceId,
+    ) -> Optional[DoNotAlertSchedule]:
+        """Fetch one DNA schedule using the portal-compatible user route."""
+        return self.get_do_not_alert_schedule(device_id, schedule_id)
 
     def create_do_not_alert_schedule(
         self,
         device_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "POST",
             self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)),
@@ -891,11 +917,7 @@ class FlumeClient:
         payload: JSONDict,
     ) -> JSONValue:
         """Create a DNA schedule using the portal payload."""
-        return self.data(
-            "POST",
-            self._user_path("/devices/{0}/do-not-alert-schedules".format(device_id)),
-            json=payload,
-        )
+        return self.create_do_not_alert_schedule(device_id, payload)
 
     def update_do_not_alert_schedule(
         self,
@@ -903,6 +925,7 @@ class FlumeClient:
         schedule_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             self._user_path(
@@ -918,19 +941,14 @@ class FlumeClient:
         payload: JSONDict,
     ) -> JSONValue:
         """Update a DNA schedule using the portal collection PATCH form."""
-        return self.data(
-            "PATCH",
-            self._user_path(
-                "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
-            ),
-            json=payload,
-        )
+        return self.update_do_not_alert_schedule(device_id, schedule_id, payload)
 
     def delete_do_not_alert_schedule(
         self,
         device_id: ResourceId,
         schedule_id: ResourceId,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "DELETE",
             self._user_path(
@@ -944,12 +962,7 @@ class FlumeClient:
         schedule_id: ResourceId,
     ) -> JSONValue:
         """Delete a DNA schedule using the portal collection route."""
-        return self.data(
-            "DELETE",
-            self._user_path(
-                "/devices/{0}/do-not-alert-schedules/{1}".format(device_id, schedule_id)
-            ),
-        )
+        return self.delete_do_not_alert_schedule(device_id, schedule_id)
 
     def update_rule_schedules(
         self,
@@ -957,6 +970,7 @@ class FlumeClient:
         rule_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             self._user_path(
@@ -975,6 +989,7 @@ class FlumeClient:
         active: bool,
     ) -> JSONValue:
         """Associate a DNA schedule with a rule and set its active state."""
+        self._require_capability("portal_writes")
         path = self._user_path(
             "/devices/{0}/rules/usage-alerts/{1}/do-not-alert-schedules".format(
                 device_id,
@@ -993,6 +1008,7 @@ class FlumeClient:
         rule_id: ResourceId,
         payload: JSONDict,
     ) -> JSONValue:
+        self._require_capability("portal_writes")
         return self.data(
             "PATCH",
             self._user_path(
@@ -1272,6 +1288,148 @@ class FlumeClient:
             params,
             SpanType,
         )
+
+    def get_usage_breakdown(
+        self,
+        device_id: ResourceId,
+        since_datetime: str,
+        until_datetime: str,
+        units: str = "gallons",
+        span_types: Optional[Sequence[str]] = None,
+        location_id: Optional[ResourceId] = None,
+    ) -> UsageBreakdown:
+        """Aggregate classified spans into portal-style usage categories.
+
+        Supplying ``location_id`` also loads span classification metadata so
+        Flume's current display names are used. Without it, known portal names
+        and a readable fallback are used without an additional API request.
+        """
+        display_names = dict(DEFAULT_PORTAL_SPAN_DISPLAY_NAMES)
+        selected_span_types = span_types
+        if location_id is not None:
+            classifications = self.list_span_types(location_id)
+            for classification in classifications:
+                name = classification.name.upper()
+                display_names[name] = (
+                    classification.display_name
+                    or classification.labeled_as
+                    or self._span_display_name(name)
+                )
+            if span_types is None:
+                visible_types = [
+                    classification.name
+                    for classification in classifications
+                    if classification.name and classification.can_view
+                ]
+                if "IRRIGATION" not in visible_types:
+                    visible_types.append("IRRIGATION")
+                if visible_types:
+                    selected_span_types = visible_types
+
+        spans = self.list_spans(
+            device_id,
+            since_datetime,
+            until_datetime,
+            units=units,
+            span_types=selected_span_types,
+        )
+
+        usage_by_type: Dict[str, float] = {}
+        counts_by_type: Dict[str, int] = {}
+        for span in spans:
+            span_type = (span.type or "UNKNOWN").upper()
+            usage_by_type[span_type] = usage_by_type.get(span_type, 0.0) + float(
+                span.total
+            )
+            counts_by_type[span_type] = counts_by_type.get(span_type, 0) + 1
+
+        irrigation_usage = usage_by_type.pop("IRRIGATION", 0.0)
+        irrigation_count = counts_by_type.pop("IRRIGATION", 0)
+        outdoor_usage = usage_by_type.get("OUTDOOR", 0.0) + irrigation_usage
+        outdoor_count = counts_by_type.get("OUTDOOR", 0) + irrigation_count
+        if outdoor_usage or outdoor_count:
+            usage_by_type["OUTDOOR"] = outdoor_usage
+            counts_by_type["OUTDOOR"] = outdoor_count
+
+        # Indoor is a portal display bucket, not necessarily a raw span type.
+        # The live portal account returned no INDOOR spans for a window where
+        # Indoor was displayed. Use whole-house query usage as the authoritative
+        # denominator and derive Indoor as the residual after every explicit
+        # displayed classification (including Outdoor's irrigation rollup).
+        usage_by_type.pop("INDOOR", None)
+        counts_by_type.pop("INDOOR", None)
+        total_usage = self._get_usage_window_total(
+            device_id,
+            since_datetime,
+            until_datetime,
+            units,
+        )
+        explicit_usage = sum(usage_by_type.values())
+        indoor_usage = max(total_usage - explicit_usage, 0.0)
+        usage_by_type["INDOOR"] = indoor_usage
+        counts_by_type["INDOOR"] = 0
+
+        categories = [
+            UsageBreakdownCategory(
+                type=span_type,
+                display_name=display_names.get(
+                    span_type, self._span_display_name(span_type)
+                ),
+                usage=usage,
+                percentage=(usage / total_usage * 100.0) if total_usage else 0.0,
+                span_count=counts_by_type[span_type],
+            )
+            for span_type, usage in sorted(
+                usage_by_type.items(), key=lambda item: (-item[1], item[0])
+            )
+        ]
+        return UsageBreakdown(
+            since_datetime=since_datetime,
+            until_datetime=until_datetime,
+            units=units,
+            total_usage=total_usage,
+            categories=categories,
+        )
+
+    def _get_usage_window_total(
+        self,
+        device_id: ResourceId,
+        since_datetime: str,
+        until_datetime: str,
+        units: str,
+    ) -> float:
+        """Return whole-window usage from Flume's device SUM query."""
+        request_id = "usage_breakdown_total"
+        result = self.query(
+            device_id,
+            {
+                "queries": [
+                    {
+                        "request_id": request_id,
+                        "bucket": "MON",
+                        "since_datetime": since_datetime,
+                        "until_datetime": until_datetime,
+                        "operation": "SUM",
+                        "units": units.upper(),
+                    }
+                ]
+            },
+        )
+        if not result:
+            return 0.0
+        values = result[0].get(request_id, [])
+        if not isinstance(values, list):
+            return 0.0
+        return sum(
+            float(item["value"])
+            for item in values
+            if isinstance(item, dict) and isinstance(item.get("value"), (int, float))
+        )
+
+    @staticmethod
+    def _span_display_name(span_type: str) -> str:
+        """Turn an unknown API classification key into a readable label."""
+        return span_type.replace("_", " ").title()
 
     def submit_feedback(self, device_id: ResourceId, payload: JSONDict) -> JSONValue:
         return self.data(

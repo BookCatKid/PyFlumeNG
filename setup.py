@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="PyFlumeNG",
-    version="0.10.0",
+    version="0.11.0",
     author="ChrisMandich",
     author_email="Chris@Mandich.net",
     description="Complete Flume API client with Personal API and portal capabilities",

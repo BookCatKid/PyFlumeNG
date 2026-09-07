@@ -62,4 +62,21 @@ schedule association returned on a rule is a compact object with
 full `DoNotAlertSchedule` resource returned by the do-not-alert schedule
 endpoint.
 
+Do-not-alert schedules have complete unprefixed CRUD helpers:
+
+```python
+schedules = client.list_do_not_alert_schedules(device_id)
+schedule = client.get_do_not_alert_schedule(device_id, schedule_id)
+created = client.create_do_not_alert_schedule(device_id, payload)
+updated = client.update_do_not_alert_schedule(device_id, schedule_id, payload)
+deleted = client.delete_do_not_alert_schedule(device_id, schedule_id)
+```
+
+The `*_portal_*` names remain compatibility aliases, but new code does not need
+to choose method names based on auth type. Known portal-only writes (usage-alert
+rule mutations, do-not-alert schedule mutations, schedule associations, and
+shutoff configuration) enforce the `portal_writes` capability before sending a
+request, so an accidental `PersonalAuth` write fails locally with
+`FlumeCapabilityError`.
+
 See the [API reference](api-reference.md) for every method and return type.
