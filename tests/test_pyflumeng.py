@@ -853,6 +853,30 @@ def test_portal_read_aliases_use_working_user_scoped_routes(requests_mock):
     assert client.base_url == PORTAL_API_URL
 
 
+def test_get_notification_filters_collection_because_item_get_is_not_supported(
+    requests_mock,
+):
+    """Single-notification reads use the collection route seen on the live API."""
+    requests_mock.get(
+        PORTAL_API_URL + "/users/12345/notifications",
+        json={
+            "success": True,
+            "data": [{"id": "first"}, {"id": "wanted"}],
+            "pagination": None,
+        },
+    )
+    client = FlumeClient(
+        PortalAuth("user@example.com", "password", flume_token=token())
+    )
+
+    notification = client.get_notification("wanted")
+
+    assert notification is not None
+    assert notification.id == "wanted"
+    assert requests_mock.call_count == 1
+    assert requests_mock.last_request.path == "/users/12345/notifications"
+
+
 def test_portal_services_match_frontend_user_scoped_routes(requests_mock):
     """Portal services use the user prefix applied by the frontend fetch layer."""
     requests_mock.post(

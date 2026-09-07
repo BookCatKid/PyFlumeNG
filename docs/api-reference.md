@@ -94,6 +94,7 @@ Call Flume endpoints with a PersonalAuth or PortalAuth object.
 - `list_portal_notifications(**params: JSONValue) -> List[Notification]`
   List notifications using the user-scoped route with portal auth data.
 - `get_notification(notification_id: ResourceId) -> Optional[Notification]`
+  Return one notification by ID using the collection route.
 - `get_portal_notification(notification_id: ResourceId) -> Optional[Notification]`
   Fetch one notification using the user-scoped route with portal auth.
 - `update_notification(notification_id: ResourceId, payload: JSONDict) -> JSONValue`

@@ -452,10 +452,22 @@ class FlumeClient:
         return self.list_notifications(**params)
 
     def get_notification(self, notification_id: ResourceId) -> Optional[Notification]:
-        return self.data_one(
-            "GET",
-            self._user_path("/notifications/{0}".format(notification_id)),
-            Notification,
+        """Return one notification by ID using the collection route.
+
+        The customer portal supports PATCH/DELETE on
+        ``/notifications/{id}``, but the corresponding GET route returns 404.
+        Filter the paginated collection instead so this helper matches the live
+        API rather than relying on a route that only looks symmetrical.
+        """
+        normalized_id = str(notification_id)
+        return next(
+            (
+                notification
+                for notification in self.list_notifications()
+                if notification.id is not None
+                and str(notification.id) == normalized_id
+            ),
+            None,
         )
 
     def get_portal_notification(

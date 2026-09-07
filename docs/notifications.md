@@ -55,10 +55,12 @@ client = pyflumeng.FlumeClient(auth)  # auth may be PersonalAuth or PortalAuth
 notifications = client.list_notifications(read=False)
 ```
 
-`list_notifications()` and `get_notification()` use the user-scoped routes and
-work with either auth mode. `list_portal_notifications()` and
-`get_portal_notification()` delegate to those same reads; live testing found
-that the guessed root `/notifications` read is not a valid portal route.
+`list_notifications()` uses the user-scoped collection route and works with
+either auth mode. The live API does **not** implement a matching
+`GET /notifications/{id}` route even though PATCH and DELETE are supported on
+that path, so `get_notification()` follows the paginated collection and filters
+the result by ID. `list_portal_notifications()` and
+`get_portal_notification()` delegate to those same working reads.
 
 Notification mutation helpers are separate. Methods marked as portal writes
 require `PortalAuth` because `FlumeClient` checks for the `portal_writes`
