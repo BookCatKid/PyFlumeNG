@@ -9,13 +9,13 @@ Both auth modes can read usage alerts and usage-alert rules. This example uses
 PortalAuth merely to call `get_usage_alerts()` or `get_usage_alert_rules()`.
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-usage = pyflume.FlumeUsageAlertList(auth)
+usage = pyflumeng.FlumeUsageAlertList(auth)
 alerts = usage.get_usage_alerts()
 rules = usage.get_usage_alert_rules("device-id")
 ```
@@ -23,13 +23,13 @@ rules = usage.get_usage_alert_rules("device-id")
 The equivalent read-only setup with `PersonalAuth` is also valid:
 
 ```python
-auth = pyflume.PersonalAuth(
+auth = pyflumeng.PersonalAuth(
     username="your_email",
     password="your_password",
     client_id="your_client_id",
     client_secret="your_client_secret",
 )
-usage = pyflume.FlumeUsageAlertList(auth)
+usage = pyflumeng.FlumeUsageAlertList(auth)
 rules = usage.get_usage_alert_rules("device-id")
 ```
 

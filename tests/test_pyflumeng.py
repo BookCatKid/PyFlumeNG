@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from pyflume import (
+from pyflumeng import (
     AccuracyResult,
     Budget,
     Device,
@@ -20,12 +20,12 @@ from pyflume import (
     UsageAlertRule,
     UsageAlertSchedule,
 )
-from pyflume.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
-from pyflume.constants import API_BASE_URL, PORTAL_API_URL, URL_OAUTH_TOKEN
-from pyflume.devices import FlumeDeviceList
-from pyflume.errors import FlumeCapabilityError, FlumeRateLimitError
-from pyflume.leak import FlumeLeakList
-from pyflume.rate_limit import RateLimitState
+from pyflumeng.auth import PORTAL_OAUTH_AUTHORIZE_URL, PORTAL_OAUTH_TOKEN_URL
+from pyflumeng.constants import API_BASE_URL, PORTAL_API_URL, URL_OAUTH_TOKEN
+from pyflumeng.devices import FlumeDeviceList
+from pyflumeng.errors import FlumeCapabilityError, FlumeRateLimitError
+from pyflumeng.leak import FlumeLeakList
+from pyflumeng.rate_limit import RateLimitState
 
 PortalAuth = FlumePortalAuth
 PORTAL_AUTHORIZE_URL = PORTAL_OAUTH_AUTHORIZE_URL
@@ -36,7 +36,7 @@ PORTAL_TOKEN_URL = PORTAL_OAUTH_TOKEN_URL
 TOKEN = (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
     "eyJ1c2VyX2lkIjoxMjM0NSwiZXhwIjoyOTk5OTk5OTk3LCJ4IjoiZmFrZSJ9."
-    "test-signature-pyflumeng"
+    "test-signature-pyflumengng"
 )
 
 
@@ -178,7 +178,7 @@ def test_list_devices_matches_portal_pagination_query(requests_mock):
 
 def test_usage_rule_read_does_not_change_legacy_usage_pagination(requests_mock):
     """Rule reads must not make an existing usage-alert page unavailable."""
-    from pyflume import FlumeUsageAlertList
+    from pyflumeng import FlumeUsageAlertList
 
     usage_url = "https://api.flumetech.com/users/12345/usage-alerts"
     rule_url = "https://api.flumetech.com/users/12345/devices/device/rules/usage-alerts"

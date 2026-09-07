@@ -4,7 +4,7 @@
 import argparse
 from getpass import getpass
 
-import pyflume
+import pyflumeng
 
 
 def _state_label(active: bool) -> str:
@@ -22,8 +22,8 @@ def main() -> None:
 
     username = args.username or input("Flume email: ").strip()
     password = getpass("Flume password: ")
-    client = pyflume.FlumeClient(
-        pyflume.PortalAuth(username=username, password=password)
+    client = pyflumeng.FlumeClient(
+        pyflumeng.PortalAuth(username=username, password=password)
     )
 
     rules = []

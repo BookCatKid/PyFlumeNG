@@ -7,7 +7,7 @@ import unittest
 import requests_mock
 
 # Local application/library-specific imports
-import pyflume
+import pyflumeng
 
 from .constants import (
     CONST_CLIENT_ID,
@@ -37,15 +37,15 @@ class TestFlumeNotificationList(unittest.TestCase):
         """
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
         mock.register_uri(
             "get",
-            pyflume.constants.API_NOTIFICATIONS_URL.format(user_id=CONST_USER_ID),
+            pyflumeng.constants.API_NOTIFICATIONS_URL.format(user_id=CONST_USER_ID),
             text=load_fixture("notification.json"),
         )
-        flume_auth = pyflume.FlumeAuth(
+        flume_auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -53,7 +53,7 @@ class TestFlumeNotificationList(unittest.TestCase):
             CONST_FLUME_TOKEN,
         )
 
-        flume_notifications = pyflume.FlumeNotificationList(flume_auth)
+        flume_notifications = pyflumeng.FlumeNotificationList(flume_auth)
         notifications = flume_notifications.get_notifications()
         assert len(notifications) == 1  # noqa: S101
         assert notifications[0][CONST_USER_ID] == 1111  # noqa: S101,WPS432
@@ -72,7 +72,7 @@ class TestFlumeNotificationList(unittest.TestCase):
 
         mock.register_uri(
             "get",
-            pyflume.constants.API_NOTIFICATIONS_URL.format(user_id=CONST_USER_ID),
+            pyflumeng.constants.API_NOTIFICATIONS_URL.format(user_id=CONST_USER_ID),
             text=load_fixture("notification_nopage.json"),
         )
 

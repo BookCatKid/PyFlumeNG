@@ -11,15 +11,15 @@ of your integration and whether you need portal-only writes.
 ## With PersonalAuth
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PersonalAuth(
+auth = pyflumeng.PersonalAuth(
     username="your_email",
     password="your_password",
     client_id="your_client_id",
     client_secret="your_client_secret",
 )
-notifications = pyflume.FlumeNotificationList(auth)
+notifications = pyflumeng.FlumeNotificationList(auth)
 first_page = notifications.notification_list
 if notifications.has_next:
     second_page = notifications.get_next_notifications()
@@ -31,13 +31,13 @@ The same helper works with the customer-portal token and does not require a
 Personal API client ID or secret:
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-notifications = pyflume.FlumeNotificationList(auth)
+notifications = pyflumeng.FlumeNotificationList(auth)
 first_page = notifications.notification_list
 ```
 
@@ -51,7 +51,7 @@ For new code, `FlumeClient.list_notifications()` follows pagination for you and
 returns one `list[Notification]` containing all pages:
 
 ```python
-client = pyflume.FlumeClient(auth)  # auth may be PersonalAuth or PortalAuth
+client = pyflumeng.FlumeClient(auth)  # auth may be PersonalAuth or PortalAuth
 notifications = client.list_notifications(read=False)
 ```
 

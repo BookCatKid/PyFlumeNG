@@ -7,7 +7,7 @@ import unittest
 import requests_mock
 
 # Local application/library-specific imports
-import pyflume
+import pyflumeng
 
 from .constants import (
     CONST_CLIENT_ID,
@@ -37,15 +37,15 @@ class TestFlumeUsageAlerts(unittest.TestCase):
         """
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
         mock.register_uri(
             "get",
-            pyflume.constants.API_USAGE_URL.format(user_id=CONST_USER_ID),
+            pyflumeng.constants.API_USAGE_URL.format(user_id=CONST_USER_ID),
             text=load_fixture("usage.json"),
         )
-        flume_auth = pyflume.FlumeAuth(
+        flume_auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -53,10 +53,10 @@ class TestFlumeUsageAlerts(unittest.TestCase):
             CONST_FLUME_TOKEN,
         )
 
-        flume_alerts = pyflume.FlumeUsageAlertList(flume_auth)
+        flume_alerts = pyflumeng.FlumeUsageAlertList(flume_auth)
         alerts = flume_alerts.get_usage_alerts()
         assert len(alerts) == 50  # noqa: S101, WPS432
-        assert isinstance(alerts[0], pyflume.UsageAlert)  # noqa: S101
+        assert isinstance(alerts[0], pyflumeng.UsageAlert)  # noqa: S101
         assert alerts[0]["device_id"] == "6248148189204194987"  # noqa: S101
         assert alerts[0]["event_rule_name"] == "High Flow Alert"  # noqa: S101
         assert flume_alerts.has_next  # noqa: S101
@@ -75,7 +75,7 @@ class TestFlumeUsageAlerts(unittest.TestCase):
 
         mock.register_uri(
             "get",
-            pyflume.constants.API_USAGE_URL.format(user_id=CONST_USER_ID),
+            pyflumeng.constants.API_USAGE_URL.format(user_id=CONST_USER_ID),
             text=load_fixture("usage_nopage.json"),
         )
 
@@ -97,19 +97,19 @@ class TestFlumeUsageAlerts(unittest.TestCase):
         """
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
         mock.register_uri(
             "get",
-            pyflume.constants.API_USAGE_URL.format(user_id=CONST_USER_ID),
+            pyflumeng.constants.API_USAGE_URL.format(user_id=CONST_USER_ID),
             text=load_fixture("usage_nopage.json"),
         )
         device_id = "6248148189204194987"
         rule_id = "test-rule-01"
         mock.register_uri(
             "get",
-            pyflume.constants.API_USAGE_RULES_URL.format(
+            pyflumeng.constants.API_USAGE_RULES_URL.format(
                 user_id=CONST_USER_ID,
                 device_id=device_id,
             ),
@@ -117,7 +117,7 @@ class TestFlumeUsageAlerts(unittest.TestCase):
         )
         mock.register_uri(
             "get",
-            pyflume.constants.API_USAGE_RULE_URL.format(
+            pyflumeng.constants.API_USAGE_RULE_URL.format(
                 user_id=CONST_USER_ID,
                 device_id=device_id,
                 rule_id=rule_id,
@@ -126,14 +126,14 @@ class TestFlumeUsageAlerts(unittest.TestCase):
         )
         mock.register_uri(
             "patch",
-            pyflume.constants.API_USAGE_RULE_URL.format(
+            pyflumeng.constants.API_USAGE_RULE_URL.format(
                 user_id=CONST_USER_ID,
                 device_id=device_id,
                 rule_id=rule_id,
             ),
             text=load_fixture("usage_rule.json"),
         )
-        flume_auth = pyflume.FlumeAuth(
+        flume_auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -141,11 +141,11 @@ class TestFlumeUsageAlerts(unittest.TestCase):
             CONST_FLUME_TOKEN,
         )
 
-        flume_alerts = pyflume.FlumeUsageAlertList(flume_auth)
+        flume_alerts = pyflumeng.FlumeUsageAlertList(flume_auth)
 
         rules = flume_alerts.get_usage_alert_rules(device_id)
         assert len(rules) == 2  # noqa: S101
-        assert isinstance(rules[0], pyflume.UsageAlertRule)  # noqa: S101
+        assert isinstance(rules[0], pyflumeng.UsageAlertRule)  # noqa: S101
         assert rules[0]["id"] == rule_id  # noqa: S101
         assert rules[0]["active"]  # noqa: S101
 

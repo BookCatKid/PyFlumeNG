@@ -48,9 +48,9 @@ or account.
 and client secret generated from Flume's API Access settings:
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PersonalAuth(
+auth = pyflumeng.PersonalAuth(
     username="your_email",
     password="your_password",
     client_id="your_client_id",
@@ -75,13 +75,13 @@ requests and is updated from Flume's rate-limit response headers when present.
 flow used by Flume's customer web application:
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-client = pyflume.FlumeClient(auth)
+client = pyflumeng.FlumeClient(auth)
 ```
 
 Portal auth does not take your Personal API client ID or secret. PyFlumeNG uses
@@ -105,11 +105,11 @@ Portal auth is required for operations that Flume rejects when performed with
 a normal Personal API token. Usage-alert rule writes are the clearest example:
 
 ```python
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-client = pyflume.FlumeClient(auth)
+client = pyflumeng.FlumeClient(auth)
 
 client.set_portal_usage_alert_rule_active(
     device_id="your_device_id",
@@ -129,30 +129,30 @@ Both of these are valid library configurations:
 
 ```python
 # Personal API token
-personal = pyflume.PersonalAuth(
+personal = pyflumeng.PersonalAuth(
     username="your_email",
     password="your_password",
     client_id="your_client_id",
     client_secret="your_client_secret",
 )
-personal_client = pyflume.FlumeClient(personal)
+personal_client = pyflumeng.FlumeClient(personal)
 notifications = personal_client.list_notifications()
 ```
 
 ```python
 # Customer-portal token
-portal = pyflume.PortalAuth(
+portal = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-portal_client = pyflume.FlumeClient(portal)
+portal_client = pyflumeng.FlumeClient(portal)
 notifications = portal_client.list_notifications()
 ```
 
 The same applies to the legacy notification helper:
 
 ```python
-notifications = pyflume.FlumeNotificationList(portal)
+notifications = pyflumeng.FlumeNotificationList(portal)
 ```
 
 There is no need to create a Personal API application simply because you want
@@ -164,8 +164,8 @@ The public names exist so code can either retain the original PyFlume naming or
 make the auth mode explicit:
 
 ```python
-pyflume.FlumeAuth is pyflume.PersonalAuth
-pyflume.FlumePortalAuth is pyflume.PortalAuth
+pyflumeng.FlumeAuth is pyflumeng.PersonalAuth
+pyflumeng.FlumePortalAuth is pyflumeng.PortalAuth
 ```
 
 Both auth classes expose token state, the current user ID, authorization

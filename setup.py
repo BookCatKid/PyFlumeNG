@@ -15,7 +15,7 @@ setuptools.setup(
     long_description=long_description,
     url="https://github.com/BookCatKid/PyFlumeNG",
     packages=setuptools.find_packages(exclude=["tests", "tests.*"]),
-    package_data={"pyflume": ["py.typed"]},
+    package_data={"pyflumeng": ["py.typed"]},
     include_package_data=True,
     python_requires=">=3.8",
     classifiers=[

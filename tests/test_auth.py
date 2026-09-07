@@ -10,7 +10,7 @@ import requests_mock
 from requests import Session
 
 # Local application/library-specific imports
-import pyflume
+import pyflumeng
 
 from .constants import (
     CONST_CLIENT_ID,
@@ -40,10 +40,10 @@ class TestFlumeAuth(unittest.TestCase):
         """
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
-        auth = pyflume.FlumeAuth(
+        auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -58,7 +58,7 @@ class TestFlumeAuth(unittest.TestCase):
         """Test the customer portal authorization-code flow."""
         mock.register_uri(
             "get",
-            pyflume.constants.PORTAL_API_URL + "/account/login",
+            pyflumeng.constants.PORTAL_API_URL + "/account/login",
             text="<form />",
         )
 
@@ -66,22 +66,22 @@ class TestFlumeAuth(unittest.TestCase):
             state = parse_qs(request.text)["state"][0]
             context.status_code = 302
             context.headers["Location"] = "{0}?code=test-code&state={1}".format(
-                pyflume.constants.PORTAL_REDIRECT_URI,
+                pyflumeng.constants.PORTAL_REDIRECT_URI,
                 state,
             )
             return ""
 
         mock.register_uri(
             "post",
-            pyflume.constants.PORTAL_OAUTH_AUTHORIZE_URL,
+            pyflumeng.constants.PORTAL_OAUTH_AUTHORIZE_URL,
             text=authorize,
         )
         mock.register_uri(
             "post",
-            pyflume.constants.PORTAL_OAUTH_TOKEN_URL,
+            pyflumeng.constants.PORTAL_OAUTH_TOKEN_URL,
             text=load_fixture(CONST_TOKEN_FILE),
         )
 
-        auth = pyflume.FlumePortalAuth(CONST_USERNAME, CONST_PASSWORD)
+        auth = pyflumeng.FlumePortalAuth(CONST_USERNAME, CONST_PASSWORD)
         assert auth.user_id == CONST_USER_ID  # noqa: S101
         assert auth.authorization_header["authorization"].startswith("Bearer ")

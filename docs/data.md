@@ -10,16 +10,16 @@ queries.
 
 ```python
 from datetime import timedelta
-import pyflume
+import pyflumeng
 
-auth = pyflume.PersonalAuth(
+auth = pyflumeng.PersonalAuth(
     username="your_email",
     password="your_password",
     client_id="your_client_id",
     client_secret="your_client_secret",
 )
 
-data = pyflume.FlumeData(
+data = pyflumeng.FlumeData(
     flume_auth=auth,
     device_id="your_device_id",
     device_tz="America/Los_Angeles",
@@ -31,12 +31,12 @@ print(data.values)
 Equivalent setup with portal auth:
 
 ```python
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
 
-data = pyflume.FlumeData(
+data = pyflumeng.FlumeData(
     flume_auth=auth,
     device_id="your_device_id",
     device_tz="America/Los_Angeles",
@@ -55,7 +55,7 @@ To start from PyFlumeNG's standard query set and customize it, generate the
 payload without constructing a `FlumeData` instance:
 
 ```python
-payload = pyflume.FlumeData.generate_api_query_payload(
+payload = pyflumeng.FlumeData.generate_api_query_payload(
     timedelta(minutes=60),
     "America/Los_Angeles",
 )
@@ -70,7 +70,7 @@ payload["queries"].append(
     }
 )
 
-data = pyflume.FlumeData(
+data = pyflumeng.FlumeData(
     flume_auth=auth,
     device_id="your_device_id",
     device_tz="America/Los_Angeles",

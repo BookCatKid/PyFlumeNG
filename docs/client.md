@@ -10,13 +10,13 @@ either token; methods that perform known portal-only writes explicitly require
 the `portal_writes` capability.
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-client = pyflume.FlumeClient(auth)
+client = pyflumeng.FlumeClient(auth)
 
 devices = client.list_devices()
 rules = client.list_usage_alert_rules(devices[0].id)

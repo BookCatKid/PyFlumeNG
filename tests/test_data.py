@@ -9,7 +9,7 @@ import requests_mock
 from requests import Session
 
 # Local application/library-specific imports
-import pyflume
+import pyflumeng
 
 from .constants import (
     CONST_CLIENT_ID,
@@ -37,19 +37,19 @@ class TestFlumeData(unittest.TestCase):
         """
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.API_QUERY_URL.format(
+            pyflumeng.constants.API_QUERY_URL.format(
                 user_id=CONST_USER_ID,
                 device_id="device_id",
             ),
             text=load_fixture("query.json"),
         )
 
-        flume_auth = pyflume.FlumeAuth(
+        flume_auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -57,7 +57,7 @@ class TestFlumeData(unittest.TestCase):
             CONST_FLUME_TOKEN,
         )
 
-        flume = pyflume.FlumeData(
+        flume = pyflumeng.FlumeData(
             flume_auth,
             "device_id",
             "America/Los_Angeles",
@@ -83,10 +83,10 @@ class TestFlumeData(unittest.TestCase):
         """A caller-supplied query payload must be sent unchanged on update."""
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
-        query_url = pyflume.constants.API_QUERY_URL.format(
+        query_url = pyflumeng.constants.API_QUERY_URL.format(
             user_id=CONST_USER_ID,
             device_id="device_id",
         )
@@ -107,7 +107,7 @@ class TestFlumeData(unittest.TestCase):
                 }
             ]
         }
-        flume_auth = pyflume.FlumeAuth(
+        flume_auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -115,7 +115,7 @@ class TestFlumeData(unittest.TestCase):
             CONST_FLUME_TOKEN,
         )
 
-        flume = pyflume.FlumeData(
+        flume = pyflumeng.FlumeData(
             flume_auth,
             "device_id",
             "America/Los_Angeles",
@@ -131,7 +131,7 @@ class TestFlumeData(unittest.TestCase):
 
     def test_generate_api_query_payload_is_public_class_method(self):
         """The default query payload can be generated without an instance."""
-        payload = pyflume.FlumeData.generate_api_query_payload(
+        payload = pyflumeng.FlumeData.generate_api_query_payload(
             CONST_SCAN_INTERVAL,
             "America/Los_Angeles",
         )

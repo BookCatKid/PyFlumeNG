@@ -1,7 +1,7 @@
 # PyFlumeNG
 
-PyFlumeNG is a fork and superset of PyFlume. It keeps the existing `pyflume`
-import package and legacy helpers while adding the customer-portal OAuth flow,
+PyFlumeNG is a fork and superset of PyFlume. It uses the dedicated `pyflumeng`
+import package and retains the legacy helpers while adding the customer-portal OAuth flow,
 portal write operations, typed resource models, pagination, response/error
 handling, rate-limit state, and the endpoint surface used by Flume's customer
 portal.
@@ -30,15 +30,15 @@ documented Personal API password-grant flow with credentials generated from
 Flume's API Access settings:
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PersonalAuth(
+auth = pyflumeng.PersonalAuth(
     username="your_email",
     password="your_password",
     client_id="your_client_id",
     client_secret="your_client_secret",
 )
-client = pyflume.FlumeClient(auth)
+client = pyflumeng.FlumeClient(auth)
 ```
 
 `PortalAuth` and `FlumePortalAuth` are the same class. This flow uses the same
@@ -46,13 +46,13 @@ customer-portal OAuth path as Flume's web app and needs only the account
 credentials:
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-client = pyflume.FlumeClient(auth)
+client = pyflumeng.FlumeClient(auth)
 ```
 
 You can use that `PortalAuth` object for normal reads too. For example,
@@ -79,7 +79,7 @@ Models expose known API fields to type checkers and IDEs while remaining
 forward-compatible with Flume additions. Unknown response fields remain
 available as attributes or mapping keys and are preserved by `to_dict()`.
 
-`pyflume` ships a `py.typed` marker so installed type checkers can consume the
+`pyflumeng` ships a `py.typed` marker so installed type checkers can consume the
 package annotations. The complete method signatures and model fields are in the
 [generated API reference](docs/api-reference.md).
 

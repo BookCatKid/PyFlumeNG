@@ -7,7 +7,7 @@ import unittest
 import requests_mock
 
 # Local application/library-specific imports
-import pyflume
+import pyflumeng
 
 from .constants import (
     CONST_CLIENT_ID,
@@ -37,18 +37,18 @@ class TestFlumeLeakList(unittest.TestCase):
         """
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
         mock.register_uri(
             "get",
-            pyflume.constants.API_LEAK_URL.format(
+            pyflumeng.constants.API_LEAK_URL.format(
                 user_id=CONST_USER_ID,
                 device_id="6248148189204194987",
             ),
             text=load_fixture("leak.json"),
         )
-        flume_auth = pyflume.FlumeAuth(
+        flume_auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -56,7 +56,7 @@ class TestFlumeLeakList(unittest.TestCase):
             CONST_FLUME_TOKEN,
         )
 
-        flume_leaks = pyflume.FlumeLeakList(flume_auth, "6248148189204194987")
+        flume_leaks = pyflumeng.FlumeLeakList(flume_auth, "6248148189204194987")
         alerts = flume_leaks.get_leaks()
         assert len(alerts) == 1  # noqa: S101
         assert alerts[0]["active"]  # noqa: S101

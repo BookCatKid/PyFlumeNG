@@ -7,7 +7,7 @@ import unittest
 import requests_mock
 
 # Local application/library-specific imports
-import pyflume
+import pyflumeng
 
 from .constants import (
     CONST_CLIENT_ID,
@@ -35,15 +35,15 @@ class TestFlumeDeviceList(unittest.TestCase):
         """
         mock.register_uri(
             CONST_HTTP_METHOD_POST,
-            pyflume.constants.URL_OAUTH_TOKEN,
+            pyflumeng.constants.URL_OAUTH_TOKEN,
             text=load_fixture(CONST_TOKEN_FILE),
         )
         mock.register_uri(
             "get",
-            pyflume.constants.API_DEVICES_URL.format(user_id=CONST_USER_ID),
+            pyflumeng.constants.API_DEVICES_URL.format(user_id=CONST_USER_ID),
             text=load_fixture("devices.json"),
         )
-        flume_auth = pyflume.FlumeAuth(
+        flume_auth = pyflumeng.FlumeAuth(
             CONST_USERNAME,
             CONST_PASSWORD,
             CONST_CLIENT_ID,
@@ -51,7 +51,7 @@ class TestFlumeDeviceList(unittest.TestCase):
             CONST_FLUME_TOKEN,
         )
 
-        flume_devices = pyflume.FlumeDeviceList(flume_auth)
+        flume_devices = pyflumeng.FlumeDeviceList(flume_auth)
         devices = flume_devices.get_devices()
         assert len(devices) == 1  # noqa: S101
         assert devices[0][CONST_USER_ID] == 1111  # noqa: S101,WPS432

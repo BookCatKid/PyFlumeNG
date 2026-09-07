@@ -7,15 +7,15 @@ It accepts both `PersonalAuth` and `PortalAuth`. The PersonalAuth example below
 does not mean the device helper requires that flow.
 
 ```python
-import pyflume
+import pyflumeng
 
-auth = pyflume.PersonalAuth(
+auth = pyflumeng.PersonalAuth(
     username="your_email",
     password="your_password",
     client_id="your_client_id",
     client_secret="your_client_secret",
 )
-devices = pyflume.FlumeDeviceList(auth).get_devices()
+devices = pyflumeng.FlumeDeviceList(auth).get_devices()
 print(devices[0].id)
 ```
 
@@ -23,11 +23,11 @@ If you are already authenticated through the customer portal, the equivalent
 code is simply:
 
 ```python
-auth = pyflume.PortalAuth(
+auth = pyflumeng.PortalAuth(
     username="your_email",
     password="your_password",
 )
-devices = pyflume.FlumeDeviceList(auth).get_devices()
+devices = pyflumeng.FlumeDeviceList(auth).get_devices()
 ```
 
 For new code, `FlumeClient` exposes typed device reads, current flow, purchase

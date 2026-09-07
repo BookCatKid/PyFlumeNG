@@ -13,14 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "api-reference.md"
 
 PUBLIC_CLASSES = (
-    ("pyflume/auth.py", ("FlumeAuth", "FlumePortalAuth")),
-    ("pyflume/client.py", ("FlumeClient",)),
-    ("pyflume/data.py", ("FlumeData",)),
-    ("pyflume/devices.py", ("FlumeDeviceList",)),
-    ("pyflume/leak.py", ("FlumeLeakList",)),
-    ("pyflume/notifications.py", ("FlumeNotificationList",)),
-    ("pyflume/usage.py", ("FlumeUsageAlertList",)),
-    ("pyflume/rate_limit.py", ("RateLimitState",)),
+    ("pyflumeng/auth.py", ("FlumeAuth", "FlumePortalAuth")),
+    ("pyflumeng/client.py", ("FlumeClient",)),
+    ("pyflumeng/data.py", ("FlumeData",)),
+    ("pyflumeng/devices.py", ("FlumeDeviceList",)),
+    ("pyflumeng/leak.py", ("FlumeLeakList",)),
+    ("pyflumeng/notifications.py", ("FlumeNotificationList",)),
+    ("pyflumeng/usage.py", ("FlumeUsageAlertList",)),
+    ("pyflumeng/rate_limit.py", ("RateLimitState",)),
 )
 
 
@@ -164,7 +164,7 @@ def generate() -> str:
             "",
         ]
     )
-    model_classes = _class_nodes(ROOT / "pyflume" / "models.py")
+    model_classes = _class_nodes(ROOT / "pyflumeng" / "models.py")
     for name, node in model_classes.items():
         if name == "FlumeModel":
             continue
